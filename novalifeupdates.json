@@ -4,16 +4,6 @@
     "UpdateSourcePlatform": "All",
     "UpdateSource": "SteamCMD",
     "UpdateSourceData": "1665030",
-    "UpdateSourceArgs": "885570",
-    "UpdateSourceVersion": "public",
     "SkipOnFailure": false
-  },
-  {
-    "UpdateStageName": "Set Linux Executable Permission",
-    "UpdateSourcePlatform": "Linux",
-    "UpdateSource": "Executable",
-    "UpdateSourceData": "/bin/bash",
-    "UpdateSourceArgs": "-c \"chmod +x \\\"{{$FullBaseDir}}nova-life.x86_64\\\" 2>/dev/null || true\"",
-    "SkipOnFailure": true
   }
 ]
