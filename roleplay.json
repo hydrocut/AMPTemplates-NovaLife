@@ -1,0 +1,11 @@
+{
+  "startMoney": 500.0,
+  "startBank": 0.0,
+  "maxTerrainsPerCharacter": 3,
+  "maxRentsPerCharacter": 1,
+  "maxCharactersPerAccount": 3,
+  "fuelPrice": 2.0,
+  "streetLightBreakProb": 10,
+  "ticketAlertSound": 0,
+  "AFKServiceMetier": 60
+}
