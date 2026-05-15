@@ -1,62 +1,30 @@
 [
   {
-    "DisplayName": "Server Profile",
-    "Description": "Nom du profil serveur utilisé par -startServer. Exemple : TeamKitRP ou Amboise.",
+    "DisplayName": "01 - Profil serveur",
+    "Description": "Nom du dossier serveur utilisé par -startServer. Exemple : TeamKitRP ou Amboise. Le dossier devra exister dans Servers/.",
     "FieldName": "ServerProfile",
     "InputType": "text",
     "Category": "Nova-Life",
-    "Subcategory": "Server",
-    "ParamFieldName": "startServer",
+    "Subcategory": "Démarrage",
+    "ParamFieldName": "ServerProfile",
     "IncludeInCommandLine": false,
     "Required": true,
-    "DefaultValue": "TeamKitRP"
+    "DefaultValue": "TeamKitRP",
+    "Placeholder": "TeamKitRP",
+    "Keywords": "nova life profil serveur startserver dossier"
   },
   {
-    "DisplayName": "Game Port",
-    "Description": "Port principal du serveur Nova-Life.",
-    "FieldName": "$ServerPort",
-    "InputType": "number",
+    "DisplayName": "02 - Arguments personnalisés",
+    "Description": "Arguments supplémentaires ajoutés à la fin de la commande de lancement. À laisser vide sauf besoin spécifique.",
+    "FieldName": "CustomServerArgs",
+    "InputType": "text",
     "Category": "Nova-Life",
-    "Subcategory": "Ports",
-    "ParamFieldName": "serverPort",
+    "Subcategory": "Avancé",
+    "ParamFieldName": "CustomServerArgs",
     "IncludeInCommandLine": false,
-    "DefaultValue": "7777",
-    "Suffix": "UDP"
-  },
-  {
-    "DisplayName": "Query Port",
-    "Description": "Port query Nova-Life.",
-    "FieldName": "$QueryPort",
-    "InputType": "number",
-    "Category": "Nova-Life",
-    "Subcategory": "Ports",
-    "ParamFieldName": "queryPort",
-    "IncludeInCommandLine": false,
-    "DefaultValue": "7778",
-    "Suffix": "UDP"
-  },
-  {
-    "DisplayName": "Steam Port",
-    "Description": "Port Steam principal.",
-    "FieldName": "$SteamPort",
-    "InputType": "number",
-    "Category": "Nova-Life",
-    "Subcategory": "Ports",
-    "ParamFieldName": "steamPort",
-    "IncludeInCommandLine": false,
-    "DefaultValue": "27015",
-    "Suffix": "UDP"
-  },
-  {
-    "DisplayName": "Steam Port 2",
-    "Description": "Port Steam secondaire.",
-    "FieldName": "$SteamPort2",
-    "InputType": "number",
-    "Category": "Nova-Life",
-    "Subcategory": "Ports",
-    "ParamFieldName": "steamPort2",
-    "IncludeInCommandLine": false,
-    "DefaultValue": "27016",
-    "Suffix": "UDP"
+    "DefaultValue": "",
+    "Placeholder": "",
+    "SkipIfEmpty": true,
+    "Keywords": "nova life arguments custom avance"
   }
 ]
