@@ -1,0 +1,30 @@
+[
+  {
+    "Protocol": "UDP",
+    "Port": 7777,
+    "Ref": "ServerPort",
+    "Name": "Game Port",
+    "Description": "Port principal du serveur Nova-Life"
+  },
+  {
+    "Protocol": "UDP",
+    "Port": 7778,
+    "Ref": "QueryPort",
+    "Name": "Query Port",
+    "Description": "Port query Nova-Life"
+  },
+  {
+    "Protocol": "UDP",
+    "Port": 27015,
+    "Ref": "SteamPort",
+    "Name": "Steam Port",
+    "Description": "Port Steam principal"
+  },
+  {
+    "Protocol": "UDP",
+    "Port": 27016,
+    "Ref": "SteamPort2",
+    "Name": "Steam Port 2",
+    "Description": "Port Steam secondaire"
+  }
+]
