@@ -1,0 +1,160 @@
+Meta.DisplayName=Nova-Life: Amboise
+Meta.Description=Nova-Life: Amboise Dedicated Server
+Meta.OS=Linux
+Meta.AarchSupport=Unknown
+Meta.Arch=x86_64
+Meta.Author=TeamKit
+Meta.URL=https://store.steampowered.com/app/885570/NovaLife_Amboise/
+Meta.DisplayImageSource=steam:885570
+Meta.EndpointURIFormat=steam://connect/{ip}:{GenericModule.App.Ports.$ServerPort}
+Meta.ConfigManifest=novalifeconfig.json
+Meta.MetaConfigManifest=novalifemetaconfig.json
+Meta.ConfigRoot=novalife.kvp
+Meta.MinAMPVersion=2.5.0.8
+Meta.SpecificDockerImage=cubecoders/ampbase:debian
+Meta.DockerRequired=False
+Meta.DockerBaseReadOnly=False
+Meta.ContainerPolicy=Supported
+Meta.ConfigReleaseState=NotSpecified
+Meta.NoCommercialUsage=False
+Meta.ConfigVersion=1
+Meta.ReleaseNotes=
+Meta.BreakingReleaseNotes=
+Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
+Meta.ImportableExtensions=[]
+
+App.DisplayName=Nova-Life: Amboise
+App.RootDir=./novalife/
+App.BaseDirectory=./novalife/1665030/
+App.SteamWorkshopDownloadLocation=
+App.ExecutableWin=
+App.ExecutableLinux=1665030/nova-life.x86_64
+App.WorkingDir=1665030
+App.LinuxCommandLineArgs=
+App.WindowsCommandLineArgs=
+App.CommandLineArgs=-batchmode -nographics -startServer "{{ServerProfile}}" -logFile "logs.log"
+App.UseLinuxIOREDIR=False
+App.AppSettings={}
+App.EnvironmentVariables={"SteamAppId":"885570","LD_LIBRARY_PATH":"{{$FullBaseDir}}linux64:%LD_LIBRARY_PATH%"}
+App.CommandLineParameterFormat=-{0} {1}
+App.CommandLineParameterDelimiter=
+App.ExitMethod=OS_CLOSE
+App.ExitTimeout=30
+App.ExitString=quit
+App.ExitFile=app_exit.lck
+App.HasWriteableConsole=False
+App.HasReadableConsole=True
+App.UDPLogger=False
+App.SupportsLiveSettingsChanges=False
+App.LiveSettingChangeCommandFormat=set {0} "{1}"
+App.ForceIPBinding=False
+App.SupportsIPv6=False
+App.ApplicationIPBinding=0.0.0.0
+
+App.Ports=[
+  {
+    "Protocol": "UDP",
+    "Port": 7777,
+    "Ref": "ServerPort",
+    "Name": "Game Port",
+    "Description": "Port principal Nova-Life"
+  },
+  {
+    "Protocol": "UDP",
+    "Port": 7778,
+    "Ref": "QueryPort",
+    "Name": "Query Port",
+    "Description": "Port query Nova-Life"
+  },
+  {
+    "Protocol": "UDP",
+    "Port": 27015,
+    "Ref": "SteamPort",
+    "Name": "Steam Port",
+    "Description": "Port Steam principal"
+  },
+  {
+    "Protocol": "UDP",
+    "Port": 27016,
+    "Ref": "SteamPort2",
+    "Name": "Steam Port 2",
+    "Description": "Port Steam secondaire"
+  }
+]
+
+App.AdminPortRef=0
+App.PrimaryApplicationPortRef=ServerPort
+App.UniversalSleepApplicationUDPPortRef=ServerPort
+App.UniversalSleepSteamQueryPortRef=QueryPort
+App.MaxUsers=32
+App.UseRandomAdminPassword=False
+App.PersistRandomPassword=False
+App.RemoteAdminPassword=
+App.AdminMethod=STDIO
+App.IgnoreSTDOUTAfterRCON=False
+App.AdminLoginTransform=None
+App.LoginTransformPrefix=
+App.RCONConnectDelaySeconds=5
+App.RCONConnectRetrySeconds=5
+App.RCONHeartbeatMinutes=0
+App.RCONHeartbeatCommand=ping
+App.RCONSelectIPMethod=Default
+App.TelnetLoginFormat={0}
+
+App.UpdateSources=[
+  {
+    "UpdateStageName": "SteamCMD Download",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "SteamCMD",
+    "UpdateSourceData": "1665030",
+    "UpdateSourceArgs": "885570",
+    "UpdateSourceVersion": "public",
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Set Executable Flag",
+    "UpdateSourcePlatform": "Linux",
+    "UpdateSource": "SetExecutableFlag",
+    "UpdateSourceArgs": "1665030/nova-life.x86_64",
+    "SkipOnFailure": true
+  }
+]
+
+App.PreStartStages=[]
+App.UserActions=[]
+App.ForceUpdate=False
+App.ForceUpdateReason=
+App.Compatibility=None
+App.SteamUpdateAnonymousLogin=True
+App.SteamForceLoginPrompt=False
+App.RapidStartup=False
+App.SmartExcludeExemptions=["*.cfg","*.conf","*.config","*.ini","*.json","*.xml","*.properties","*.kvp","*.yml","*.yaml","*.toml"]
+App.SmartExcludeSupported=True
+App.DumpFullChildProcessTree=False
+App.MonitorChildProcessName=
+App.MonitorDirectChildOnly=False
+App.SupportsUniversalSleep=False
+App.WakeupMode=Any
+App.ApplicationReadyMode=Immediate
+
+Console.FilterMatchRegex=
+Console.FilterMatchReplacement=
+Console.ThrowawayMessageRegex=^(WARNING|ERROR): Shader.+$
+Console.AppReadyRegex=^$
+Console.UserJoinRegex=^$
+Console.UserLeaveRegex=^$
+Console.UserChatRegex=^$
+Console.UpdateAvailableRegex=
+Console.PreConnectRegex=
+Console.ConnectIPRegex=
+Console.MetricsRegex=
+Console.HideFromConsoleRegex=
+Console.SuppressLogAtStart=False
+Console.UserActions={}
+
+Limits.SleepMode=False
+Limits.SleepOnStart=False
+Limits.SleepDelayMinutes=5
+Limits.DozeDelay=2
+Limits.AutoRetryCount=2
+Limits.SleepStartThresholdSeconds=25
