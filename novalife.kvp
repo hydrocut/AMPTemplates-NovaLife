@@ -51,36 +51,7 @@ App.ForceIPBinding=False
 App.SupportsIPv6=False
 App.ApplicationIPBinding=0.0.0.0
 
-App.Ports=[
-  {
-    "Protocol": "UDP",
-    "Port": 7777,
-    "Ref": "ServerPort",
-    "Name": "Game Port",
-    "Description": "Port principal Nova-Life"
-  },
-  {
-    "Protocol": "UDP",
-    "Port": 7778,
-    "Ref": "QueryPort",
-    "Name": "Query Port",
-    "Description": "Port query Nova-Life"
-  },
-  {
-    "Protocol": "UDP",
-    "Port": 27015,
-    "Ref": "SteamPort",
-    "Name": "Steam Port",
-    "Description": "Port Steam principal"
-  },
-  {
-    "Protocol": "UDP",
-    "Port": 27016,
-    "Ref": "SteamPort2",
-    "Name": "Steam Port 2",
-    "Description": "Port Steam secondaire"
-  }
-]
+App.Ports=@IncludeJson[novalifeports.json]
 
 App.AdminPortRef=0
 App.PrimaryApplicationPortRef=ServerPort
@@ -101,24 +72,7 @@ App.RCONHeartbeatCommand=ping
 App.RCONSelectIPMethod=Default
 App.TelnetLoginFormat={0}
 
-App.UpdateSources=[
-  {
-    "UpdateStageName": "SteamCMD Download",
-    "UpdateSourcePlatform": "All",
-    "UpdateSource": "SteamCMD",
-    "UpdateSourceData": "1665030",
-    "UpdateSourceArgs": "885570",
-    "UpdateSourceVersion": "public",
-    "SkipOnFailure": false
-  },
-  {
-    "UpdateStageName": "Set Executable Flag",
-    "UpdateSourcePlatform": "Linux",
-    "UpdateSource": "SetExecutableFlag",
-    "UpdateSourceArgs": "1665030/nova-life.x86_64",
-    "SkipOnFailure": true
-  }
-]
+App.UpdateSources=@IncludeJson[novalifeupdates.json]
 
 App.PreStartStages=[]
 App.UserActions=[]
@@ -128,7 +82,7 @@ App.Compatibility=None
 App.SteamUpdateAnonymousLogin=True
 App.SteamForceLoginPrompt=False
 App.RapidStartup=False
-App.SmartExcludeExemptions=["*.cfg","*.conf","*.config","*.ini","*.json","*.xml","*.properties","*.kvp","*.yml","*.yaml","*.toml"]
+App.SmartExcludeExemptions=["*.cfg","*.conf","*.config","*.ini","*.json","*.xml","*.properties","*.kvp","*.yml","*.yaml","*.toml","*.lua"]
 App.SmartExcludeSupported=True
 App.DumpFullChildProcessTree=False
 App.MonitorChildProcessName=
