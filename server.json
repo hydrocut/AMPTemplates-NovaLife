@@ -1,0 +1,23 @@
+{
+  "serverName": "TeamKitRP",
+  "serverListName": "TeamKit.fr | Nova-Life RP FR | Serveur gratuit",
+  "serverSlot": 32,
+  "serverPort": 7777,
+  "queryPort": 7778,
+  "steamPort": 27015,
+  "isPublicServer": true,
+  "useAdminPinAuth": false,
+  "tabletUrl": "",
+  "isWhitelisted": false,
+  "useWhitelistProtection": false,
+  "whitelist": {
+    "intro": "",
+    "questions": [],
+    "date": ""
+  },
+  "autoSaveIntervalSeconds": 1800.0,
+  "disconnectClientsBeforeStop": true,
+  "mapId": 0,
+  "serverFramerate": 60,
+  "hasShop": false
+}
