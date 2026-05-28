@@ -94,16 +94,16 @@ App.ApplicationReadyMode=Immediate
 
 Console.FilterMatchRegex=
 Console.FilterMatchReplacement=
-Console.ThrowawayMessageRegex=(UnityMemory|memorysetup-)
-Console.AppReadyRegex=
-Console.UserJoinRegex=
+Console.ThrowawayMessageRegex=(UnityMemory|memorysetup-|Shader |WARNING: Shader|ERROR: Shader|ALSA lib|FMOD|Invalid pass number|Trying to access pass|Couldn't create a Convex Mesh|Ran out of virtual channels|UnloadTime)
+Console.AppReadyRegex=.*Server successfully logged on to the Steam master server.*
+Console.UserJoinRegex=^Incoming connection: ::ffff:(?<username>[0-9\.]+) - (?<userid>[0-9]+) connections\.$
 Console.UserLeaveRegex=
 Console.UserChatRegex=
 Console.UpdateAvailableRegex=
 Console.PreConnectRegex=
-Console.ConnectIPRegex=
+Console.ConnectIPRegex=^Incoming connection: ::ffff:(?<ip>[0-9\.]+) - [0-9]+ connections\.$
 Console.MetricsRegex=
-Console.HideFromConsoleRegex=(UnityMemory|memorysetup-)
+Console.HideFromConsoleRegex=(UnityMemory|memorysetup-|Shader |WARNING: Shader|ERROR: Shader|ALSA lib|FMOD|Invalid pass number|Trying to access pass|Couldn't create a Convex Mesh|Ran out of virtual channels|UnloadTime)
 Console.SuppressLogAtStart=False
 Console.UserActions={}
 
