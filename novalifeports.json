@@ -4,27 +4,27 @@
     "Port": 7787,
     "Ref": "ServerPort",
     "Name": "Game Port",
-    "Description": "Port principal Nova-Life"
+    "Description": "Port principal Nova-Life. Correspond à serverPort dans server.json."
   },
   {
     "Protocol": "UDP",
     "Port": 7788,
     "Ref": "PingPort",
     "Name": "Ping Port",
-    "Description": "Port ping Nova-Life, généralement serverPort + 1"
+    "Description": "Port ping Nova-Life. Toujours serverPort + 1. Ne pas mettre dans queryPort."
   },
   {
     "Protocol": "UDP",
     "Port": 27033,
     "Ref": "SteamQueryPort",
     "Name": "SteamQuery Port",
-    "Description": "Port SteamQuery Nova-Life"
+    "Description": "Port SteamQuery Nova-Life. Correspond à queryPort dans server.json."
   },
   {
     "Protocol": "UDP",
     "Port": 27034,
     "Ref": "SteamPort",
     "Name": "Steam Port",
-    "Description": "Port Steam Nova-Life"
+    "Description": "Port Steam Nova-Life. Correspond à steamPort dans server.json."
   }
 ]
