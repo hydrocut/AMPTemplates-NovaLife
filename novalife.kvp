@@ -90,7 +90,7 @@ App.MonitorChildProcessName=
 App.MonitorDirectChildOnly=False
 App.SupportsUniversalSleep=False
 App.WakeupMode=Any
-App.ApplicationReadyMode=Immediate
+App.ApplicationReadyMode=RegexMatch
 
 Console.FilterMatchRegex=
 Console.FilterMatchReplacement=
