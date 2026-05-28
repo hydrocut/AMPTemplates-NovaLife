@@ -94,7 +94,7 @@ App.ApplicationReadyMode=Immediate
 
 Console.FilterMatchRegex=
 Console.FilterMatchReplacement=
-Console.ThrowawayMessageRegex=^\s*(\[UnityMemory\]|"memorysetup-)
+Console.ThrowawayMessageRegex=(UnityMemory|memorysetup-)
 Console.AppReadyRegex=
 Console.UserJoinRegex=
 Console.UserLeaveRegex=
@@ -103,7 +103,7 @@ Console.UpdateAvailableRegex=
 Console.PreConnectRegex=
 Console.ConnectIPRegex=
 Console.MetricsRegex=
-Console.HideFromConsoleRegex=^\s*(\[UnityMemory\]|"memorysetup-)
+Console.HideFromConsoleRegex=(UnityMemory|memorysetup-)
 Console.SuppressLogAtStart=False
 Console.UserActions={}
 
