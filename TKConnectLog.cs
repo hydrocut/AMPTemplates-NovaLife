@@ -1,4 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
 using Life;
 using Life.DB;
 using Life.Network;
@@ -6,7 +10,7 @@ using Mirror;
 using UnityEngine;
 
 /// <summary>
-/// TKConnectLog v1.2 — TeamKit.fr
+/// TKConnectLog v2.0 — TeamKit.fr
 ///
 /// 1) Écrit dans la console serveur des lignes normalisées à la connexion
 ///    et à la déconnexion des joueurs, pour qu'AMP affiche les pseudos
@@ -15,21 +19,17 @@ using UnityEngine;
 ///      [TKLOG] LEAVE pseudo="PseudoSteam" steamid=76561198000000000
 ///
 /// 2) Annonce en jeu les arrivées/départs et souhaite la bienvenue
-///    aux joueurs avec le message TeamKit.
+///    aux joueurs (textes et lien Discord configurables via
+///    Plugins/TKConnectLog/config.json — gérable depuis le panel AMP).
 ///
-/// v1.2 :
-///  - Déconnexions détectées via LifeServer.OnPlayerDisconnectEvent
-///    (le hook plugin OnPlayerDisconnect n'est jamais appelé par le jeu)
-///  - Pseudo Steam vide au spawn : repli sur le nom RP puis le SteamID
+/// v2.0 :
+///  - Configuration via config.json (Discord, messages, activation)
+///  - Nettoyage des caractères invisibles dans les pseudos Steam
 /// </summary>
 public class TKConnectLog : Plugin
 {
-    // ===== Messages (modifiable ici, puis recompiler) =====
-    private const string WelcomeLine1 = "<color=#00f0ff>Bienvenue sur le serveur !</color>";
-    private const string WelcomeLine2 = "Serveur hébergé <color=#00ff88>gratuitement</color> par <color=#00f0ff>TeamKit.fr</color>";
-    private const string JoinBroadcast = "<color=#00f0ff>{0}</color> <color=#b8b8c8>a rejoint le serveur</color>";
-    private const string LeaveBroadcast = "<color=#00f0ff>{0}</color> <color=#b8b8c8>a quitté le serveur</color>";
-    // ======================================================
+    private TKConnectConfig config;
+    private string configPath;
 
     private class PlayerInfo
     {
@@ -49,8 +49,38 @@ public class TKConnectLog : Plugin
     public override void OnPluginInit()
     {
         base.OnPluginInit();
+        LoadConfig();
         HookDisconnectEvent();
-        Debug.Log("[TKLOG] Plugin TKConnectLog v1.2 initialisé");
+        Debug.Log("[TKLOG] Plugin TKConnectLog v2.0 initialisé");
+    }
+
+    private void LoadConfig()
+    {
+        try
+        {
+            string dir = Path.Combine(pluginsPath, "TKConnectLog");
+            configPath = Path.Combine(dir, "config.json");
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            if (!File.Exists(configPath))
+            {
+                config = new TKConnectConfig();
+                File.WriteAllText(configPath, TKConnectConfig.ToJson(config));
+                Debug.Log("[TKLOG] config.json créé : " + configPath);
+            }
+            else
+            {
+                config = TKConnectConfig.FromJson(File.ReadAllText(configPath));
+                Debug.Log("[TKLOG] config.json chargé");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKLOG] Erreur chargement config, valeurs par défaut : " + ex.Message);
+            config = new TKConnectConfig();
+        }
     }
 
     // Le jeu n'appelle jamais le hook plugin OnPlayerDisconnect : on se branche
@@ -70,29 +100,56 @@ public class TKConnectLog : Plugin
                 Debug.Log("[TKLOG] Événement de déconnexion branché");
             }
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             Debug.LogError("[TKLOG] Impossible de brancher l'événement de déconnexion : " + ex.Message);
         }
     }
 
+    // Retire les caractères de contrôle et invisibles (zéro-largeur, BOM...)
+    private static string Sanitize(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(value.Length);
+        foreach (char c in value)
+        {
+            if (char.IsControl(c))
+            {
+                continue;
+            }
+            if (c >= '​' && c <= '‏')
+            {
+                continue;
+            }
+            if (c == '﻿' || c == '⁠')
+            {
+                continue;
+            }
+            sb.Append(c);
+        }
+        return sb.ToString().Trim();
+    }
+
     private static string ResolvePseudo(Player player, Characters character)
     {
-        // steamUsername peut être vide au moment du spawn (résolution Steam asynchrone)
-        string pseudo = player.steamUsername;
-        if (string.IsNullOrWhiteSpace(pseudo))
+        // steamUsername peut être vide ou polluée au moment du spawn
+        string pseudo = Sanitize(player.steamUsername);
+        if (pseudo.Length == 0)
         {
-            try { pseudo = player.FullName; } catch { }
+            try { pseudo = Sanitize(player.FullName); } catch { }
         }
-        if (string.IsNullOrWhiteSpace(pseudo) && character != null)
+        if (pseudo.Length == 0 && character != null)
         {
-            try { pseudo = (character.Firstname + " " + character.Lastname).Trim(); } catch { }
+            try { pseudo = Sanitize(character.Firstname + " " + character.Lastname); } catch { }
         }
-        if (string.IsNullOrWhiteSpace(pseudo))
+        if (pseudo.Length == 0)
         {
             pseudo = "Joueur " + player.steamId;
         }
-        return pseudo.Trim();
+        return pseudo;
     }
 
     public override void OnPlayerSpawnCharacter(Player player, NetworkConnection conn, Characters character)
@@ -115,12 +172,28 @@ public class TKConnectLog : Plugin
             // Ligne console pour AMP
             Debug.Log($"[TKLOG] JOIN {logLine}");
 
-            // Annonce à tous les joueurs
-            Nova.server.SendMessageToAll(string.Format(JoinBroadcast, pseudo));
+            if (config.enabled)
+            {
+                // Annonce à tous les joueurs
+                if (config.showJoinLeave)
+                {
+                    Nova.server.SendMessageToAll(FormatBroadcast(config.joinMessage, pseudo));
+                }
 
-            // Message de bienvenue au joueur qui arrive
-            player.SendText(WelcomeLine1);
-            player.SendText(WelcomeLine2);
+                // Messages de bienvenue au joueur qui arrive
+                if (!string.IsNullOrEmpty(config.welcomeTitle))
+                {
+                    player.SendText("<color=#00f0ff>" + config.welcomeTitle + "</color>");
+                }
+                if (!string.IsNullOrEmpty(config.hostedByText))
+                {
+                    player.SendText(config.hostedByText);
+                }
+                if (!string.IsNullOrEmpty(config.discord))
+                {
+                    player.SendText("<color=#7b8cff>Discord :</color> " + config.discord);
+                }
+            }
         }
         else
         {
@@ -151,15 +224,99 @@ public class TKConnectLog : Plugin
             // Ligne console pour AMP
             Debug.Log($"[TKLOG] LEAVE {info.logLine}");
 
-            // Annonce à tous les joueurs restants
-            try
+            if (config.enabled && config.showJoinLeave)
             {
-                Nova.server.SendMessageToAll(string.Format(LeaveBroadcast, info.pseudo));
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError("[TKLOG] Erreur annonce départ : " + ex.Message);
+                try
+                {
+                    Nova.server.SendMessageToAll(FormatBroadcast(config.leaveMessage, info.pseudo));
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[TKLOG] Erreur annonce départ : " + ex.Message);
+                }
             }
         }
+    }
+
+    private static string FormatBroadcast(string template, string pseudo)
+    {
+        if (string.IsNullOrEmpty(template))
+        {
+            template = "{pseudo}";
+        }
+        return "<color=#b8b8c8>" + template.Replace("{pseudo}", "</color><color=#00f0ff>" + pseudo + "</color><color=#b8b8c8>") + "</color>";
+    }
+}
+
+[Serializable]
+public class TKConnectConfig
+{
+    public bool enabled = true;
+    public bool showJoinLeave = true;
+    public string welcomeTitle = "Bienvenue sur le serveur !";
+    public string hostedByText = "Serveur hébergé gratuitement par TeamKit.fr";
+    public string discord = "https://discord.gg/JXAxAupBqz";
+    public string joinMessage = "{pseudo} a rejoint le serveur";
+    public string leaveMessage = "{pseudo} a quitté le serveur";
+
+    public static string ToJson(TKConnectConfig c)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.AppendLine("{");
+        sb.AppendLine("  \"enabled\": " + (c.enabled ? "true" : "false") + ",");
+        sb.AppendLine("  \"showJoinLeave\": " + (c.showJoinLeave ? "true" : "false") + ",");
+        sb.AppendLine("  \"welcomeTitle\": \"" + Escape(c.welcomeTitle) + "\",");
+        sb.AppendLine("  \"hostedByText\": \"" + Escape(c.hostedByText) + "\",");
+        sb.AppendLine("  \"discord\": \"" + Escape(c.discord) + "\",");
+        sb.AppendLine("  \"joinMessage\": \"" + Escape(c.joinMessage) + "\",");
+        sb.AppendLine("  \"leaveMessage\": \"" + Escape(c.leaveMessage) + "\"");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    public static TKConnectConfig FromJson(string json)
+    {
+        TKConnectConfig c = new TKConnectConfig();
+        if (string.IsNullOrEmpty(json))
+        {
+            return c;
+        }
+        c.enabled = GetBool(json, "enabled", c.enabled);
+        c.showJoinLeave = GetBool(json, "showJoinLeave", c.showJoinLeave);
+        c.welcomeTitle = GetString(json, "welcomeTitle", c.welcomeTitle);
+        c.hostedByText = GetString(json, "hostedByText", c.hostedByText);
+        c.discord = GetString(json, "discord", c.discord);
+        c.joinMessage = GetString(json, "joinMessage", c.joinMessage);
+        c.leaveMessage = GetString(json, "leaveMessage", c.leaveMessage);
+        return c;
+    }
+
+    private static string GetString(string json, string key, string defaultValue)
+    {
+        Match m = Regex.Match(json, "\"" + Regex.Escape(key) + "\"\\s*:\\s*\"(?<v>(?:\\\\.|[^\"])*)\"");
+        if (!m.Success)
+        {
+            return defaultValue;
+        }
+        return m.Groups["v"].Value.Replace("\\n", "\n").Replace("\\\"", "\"").Replace("\\\\", "\\");
+    }
+
+    private static bool GetBool(string json, string key, bool defaultValue)
+    {
+        Match m = Regex.Match(json, "\"" + Regex.Escape(key) + "\"\\s*:\\s*(?<v>true|false)", RegexOptions.IgnoreCase);
+        if (!m.Success)
+        {
+            return defaultValue;
+        }
+        return string.Equals(m.Groups["v"].Value, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string Escape(string value)
+    {
+        if (value == null)
+        {
+            return "";
+        }
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "").Replace("\n", "\\n");
     }
 }

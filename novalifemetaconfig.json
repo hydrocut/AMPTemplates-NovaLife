@@ -8,5 +8,10 @@
     "ConfigFile": "Servers/{{ServerProfile}}/Config/roleplay.json",
     "AutoMap": true,
     "ConfigType": "json"
+  },
+  {
+    "ConfigFile": "Servers/{{ServerProfile}}/Plugins/TKConnectLog/config.json",
+    "AutoMap": true,
+    "ConfigType": "json"
   }
 ]

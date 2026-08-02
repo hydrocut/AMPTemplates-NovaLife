@@ -74,7 +74,10 @@
     "ParamFieldName": "$.isPublicServer",
     "IncludeInCommandLine": false,
     "DefaultValue": "true",
-    "EnumValues": { "True": "true", "False": "false" },
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    },
     "Keywords": "public liste ispublicserver"
   },
   {
@@ -87,7 +90,10 @@
     "ParamFieldName": "$.isWhitelisted",
     "IncludeInCommandLine": false,
     "DefaultValue": "false",
-    "EnumValues": { "True": "true", "False": "false" },
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    },
     "Keywords": "whitelist iswhitelisted"
   },
   {
@@ -100,7 +106,10 @@
     "ParamFieldName": "$.useWhitelistProtection",
     "IncludeInCommandLine": false,
     "DefaultValue": "false",
-    "EnumValues": { "True": "true", "False": "false" },
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    },
     "Keywords": "whitelist protection questionnaire"
   },
   {
@@ -113,7 +122,10 @@
     "ParamFieldName": "$.useAdminPinAuth",
     "IncludeInCommandLine": false,
     "DefaultValue": "false",
-    "EnumValues": { "True": "true", "False": "false" },
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    },
     "Keywords": "admin pin authentification"
   },
   {
@@ -152,7 +164,10 @@
     "ParamFieldName": "$.disconnectClientsBeforeStop",
     "IncludeInCommandLine": false,
     "DefaultValue": "true",
-    "EnumValues": { "True": "true", "False": "false" },
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    },
     "Keywords": "deconnexion arret stop disconnect"
   },
   {
@@ -191,7 +206,10 @@
     "ParamFieldName": "$.hasShop",
     "IncludeInCommandLine": false,
     "DefaultValue": "false",
-    "EnumValues": { "True": "true", "False": "false" },
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    },
     "Keywords": "boutique shop hasshop"
   },
   {
@@ -333,5 +351,97 @@
     "DefaultValue": "60",
     "MinValue": "0",
     "Keywords": "afk service metier inactivite"
+  },
+  {
+    "DisplayName": "40 - Messages du plugin activés",
+    "Description": "Active les messages en jeu du plugin TKConnectLog (bienvenue + annonces). Les lignes console pour AMP restent toujours actives.",
+    "FieldName": "PluginEnabled",
+    "InputType": "checkbox",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.enabled",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "true",
+    "Keywords": "plugin teamkit pluginenabled",
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    }
+  },
+  {
+    "DisplayName": "41 - Annonces arrivées/départs",
+    "Description": "Annonce à tous les joueurs quand quelqu'un rejoint ou quitte le serveur.",
+    "FieldName": "PluginShowJoinLeave",
+    "InputType": "checkbox",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.showJoinLeave",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "true",
+    "Keywords": "plugin teamkit pluginshowjoinleave",
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    }
+  },
+  {
+    "DisplayName": "42 - Titre du message de bienvenue",
+    "Description": "Première ligne envoyée au joueur qui se connecte. Laisser vide pour désactiver.",
+    "FieldName": "PluginWelcomeTitle",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.welcomeTitle",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "Bienvenue sur le serveur !",
+    "Keywords": "plugin teamkit pluginwelcometitle"
+  },
+  {
+    "DisplayName": "43 - Texte hébergeur",
+    "Description": "Deuxième ligne du message de bienvenue. Laisser vide pour désactiver.",
+    "FieldName": "PluginHostedByText",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.hostedByText",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "Serveur hébergé gratuitement par TeamKit.fr",
+    "Keywords": "plugin teamkit pluginhostedbytext"
+  },
+  {
+    "DisplayName": "44 - Lien Discord",
+    "Description": "Lien Discord affiché au joueur à la connexion. Laisser vide pour désactiver.",
+    "FieldName": "PluginDiscord",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.discord",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "https://discord.gg/JXAxAupBqz",
+    "Keywords": "plugin teamkit plugindiscord"
+  },
+  {
+    "DisplayName": "45 - Message d'arrivée",
+    "Description": "Annonce quand un joueur arrive. {pseudo} est remplacé par le pseudo Steam.",
+    "FieldName": "PluginJoinMessage",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.joinMessage",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "{pseudo} a rejoint le serveur",
+    "Keywords": "plugin teamkit pluginjoinmessage"
+  },
+  {
+    "DisplayName": "46 - Message de départ",
+    "Description": "Annonce quand un joueur part. {pseudo} est remplacé par le pseudo Steam.",
+    "FieldName": "PluginLeaveMessage",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.leaveMessage",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "{pseudo} a quitté le serveur",
+    "Keywords": "plugin teamkit pluginleavemessage"
   }
 ]
