@@ -29,7 +29,7 @@ namespace TeamKitIntro
     /// </summary>
     public class TeamKitIntroPlugin : Plugin
     {
-        private const string Version = "2.0.0";
+        private const string Version = "2.0.1";
 
         private string pluginDirectoryPath;
         private string configPath;
@@ -145,36 +145,50 @@ namespace TeamKitIntro
             player.ShowPanelUI(panel);
         }
 
+        private const int MaxPanelLines = 11;
+
         private string BuildIntroText(Player player, bool manualOpen)
         {
             string name = Shorten(GetPlayerName(player), 18);
-            StringBuilder sb = new StringBuilder();
-            if (!string.IsNullOrEmpty(config.subtitle))
-            {
-                sb.AppendLine(WrapText(config.subtitle, 30));
-                sb.AppendLine();
-            }
-            sb.AppendLine(WrapText("Bienvenue " + name + " !", 30));
-            sb.AppendLine(WrapText(Multiline(config.welcomeText), 30));
-            sb.AppendLine();
+            List<string> lines = new List<string>();
+            AddWrapped(lines, "Bienvenue " + name + " !");
+            AddWrapped(lines, Multiline(config.welcomeText));
+            lines.Add("");
             if (!string.IsNullOrEmpty(config.website))
             {
-                sb.AppendLine("Site : " + Shorten(config.website, 28));
+                lines.Add("Site : " + Shorten(config.website, 28));
             }
             if (!string.IsNullOrEmpty(config.discord))
             {
-                sb.AppendLine("Discord : " + Shorten(config.discord, 28));
+                lines.Add("Discord : " + Shorten(config.discord, 28));
             }
             string ad = NextAd();
             if (ad != null)
             {
-                sb.AppendLine();
-                sb.AppendLine("Le saviez-vous ?");
-                sb.AppendLine(WrapText(ad, 30));
+                List<string> adLines = new List<string>();
+                AddWrapped(adLines, ad);
+                // La pub ne s'affiche que si elle tient dans le cadre
+                if (lines.Count + 1 + adLines.Count <= MaxPanelLines)
+                {
+                    lines.Add("");
+                    lines.AddRange(adLines);
+                }
             }
-            sb.AppendLine();
-            sb.AppendLine(manualOpen ? "Ouverture manuelle." : "Clique sur Entrer.");
-            return sb.ToString();
+            if (lines.Count > MaxPanelLines)
+            {
+                lines = lines.GetRange(0, MaxPanelLines);
+            }
+            return string.Join("\n", lines);
+        }
+
+        private static void AddWrapped(List<string> target, string text)
+        {
+            string wrapped = WrapText(text, 30);
+            string[] parts = wrapped.Replace("\r", "").Split(new char[1] { '\n' });
+            foreach (string line in parts)
+            {
+                target.Add(line);
+            }
         }
 
         // Renvoie la prochaine pub non vide, en tournant à chaque affichage
@@ -388,9 +402,9 @@ namespace TeamKitIntro
         public string rulesButtonText = "Regles";
         public string closeButtonText = "Fermer";
         public string enterChatMessage = "Bienvenue sur TeamKit.fr | Nova-Life RP.";
-        public string adMessage1 = "Ce serveur est hébergé gratuitement par TeamKit.fr — découvre nos autres serveurs sur le site !";
-        public string adMessage2 = "Rejoins la communauté TeamKit sur Discord pour les événements et les annonces.";
-        public string adMessage3 = "TeamKit héberge aussi des serveurs DayZ, Eco et Garry's Mod — viens tester !";
+        public string adMessage1 = "Serveur hébergé gratuitement par TeamKit.fr !";
+        public string adMessage2 = "Rejoins le Discord pour les événements !";
+        public string adMessage3 = "TeamKit héberge aussi DayZ, Eco et GMod !";
 
         public static IntroConfig CreateDefault()
         {

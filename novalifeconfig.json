@@ -593,7 +593,7 @@
     "Subcategory": "Écran d'accueil",
     "ParamFieldName": "$.adMessage1",
     "IncludeInCommandLine": false,
-    "DefaultValue": "Ce serveur est hébergé gratuitement par TeamKit.fr — découvre nos autres serveurs sur le site !",
+    "DefaultValue": "Serveur hébergé gratuitement par TeamKit.fr !",
     "Keywords": "plugin introad1"
   },
   {
@@ -605,7 +605,7 @@
     "Subcategory": "Écran d'accueil",
     "ParamFieldName": "$.adMessage2",
     "IncludeInCommandLine": false,
-    "DefaultValue": "Rejoins la communauté TeamKit sur Discord pour les événements et les annonces.",
+    "DefaultValue": "Rejoins le Discord pour les événements !",
     "Keywords": "plugin introad2"
   },
   {
@@ -617,7 +617,7 @@
     "Subcategory": "Écran d'accueil",
     "ParamFieldName": "$.adMessage3",
     "IncludeInCommandLine": false,
-    "DefaultValue": "TeamKit héberge aussi des serveurs DayZ, Eco et Garry's Mod — viens tester !",
+    "DefaultValue": "TeamKit héberge aussi DayZ, Eco et GMod !",
     "Keywords": "plugin introad3"
   }
 ]
