@@ -6,7 +6,7 @@ using Mirror;
 using UnityEngine;
 
 /// <summary>
-/// TKConnectLog v1.1 — TeamKit.fr
+/// TKConnectLog v1.2 — TeamKit.fr
 ///
 /// 1) Écrit dans la console serveur des lignes normalisées à la connexion
 ///    et à la déconnexion des joueurs, pour qu'AMP affiche les pseudos
@@ -16,6 +16,11 @@ using UnityEngine;
 ///
 /// 2) Annonce en jeu les arrivées/départs et souhaite la bienvenue
 ///    aux joueurs avec le message TeamKit.
+///
+/// v1.2 :
+///  - Déconnexions détectées via LifeServer.OnPlayerDisconnectEvent
+///    (le hook plugin OnPlayerDisconnect n'est jamais appelé par le jeu)
+///  - Pseudo Steam vide au spawn : repli sur le nom RP puis le SteamID
 /// </summary>
 public class TKConnectLog : Plugin
 {
@@ -35,6 +40,8 @@ public class TKConnectLog : Plugin
     // connectionId -> infos joueur, pour retrouver le pseudo à la déconnexion
     private readonly Dictionary<int, PlayerInfo> connectedPlayers = new Dictionary<int, PlayerInfo>();
 
+    private bool disconnectHooked;
+
     public TKConnectLog(IGameAPI api) : base(api)
     {
     }
@@ -42,21 +49,66 @@ public class TKConnectLog : Plugin
     public override void OnPluginInit()
     {
         base.OnPluginInit();
-        Debug.Log("[TKLOG] Plugin TKConnectLog v1.1 initialisé");
+        HookDisconnectEvent();
+        Debug.Log("[TKLOG] Plugin TKConnectLog v1.2 initialisé");
+    }
+
+    // Le jeu n'appelle jamais le hook plugin OnPlayerDisconnect : on se branche
+    // directement sur l'événement public du serveur.
+    private void HookDisconnectEvent()
+    {
+        if (disconnectHooked)
+        {
+            return;
+        }
+        try
+        {
+            if (Nova.server != null)
+            {
+                Nova.server.OnPlayerDisconnectEvent += HandleDisconnect;
+                disconnectHooked = true;
+                Debug.Log("[TKLOG] Événement de déconnexion branché");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("[TKLOG] Impossible de brancher l'événement de déconnexion : " + ex.Message);
+        }
+    }
+
+    private static string ResolvePseudo(Player player, Characters character)
+    {
+        // steamUsername peut être vide au moment du spawn (résolution Steam asynchrone)
+        string pseudo = player.steamUsername;
+        if (string.IsNullOrWhiteSpace(pseudo))
+        {
+            try { pseudo = player.FullName; } catch { }
+        }
+        if (string.IsNullOrWhiteSpace(pseudo) && character != null)
+        {
+            try { pseudo = (character.Firstname + " " + character.Lastname).Trim(); } catch { }
+        }
+        if (string.IsNullOrWhiteSpace(pseudo))
+        {
+            pseudo = "Joueur " + player.steamId;
+        }
+        return pseudo.Trim();
     }
 
     public override void OnPlayerSpawnCharacter(Player player, NetworkConnection conn, Characters character)
     {
         base.OnPlayerSpawnCharacter(player, conn, character);
+        HookDisconnectEvent();
 
-        string logLine = $"pseudo=\"{player.steamUsername}\" steamid={player.steamId}";
+        string pseudo = ResolvePseudo(player, character);
+        string logLine = $"pseudo=\"{pseudo}\" steamid={player.steamId}";
 
         // Ne traite le JOIN qu'une fois par connexion (pas à chaque changement de personnage)
         if (!connectedPlayers.ContainsKey(conn.connectionId))
         {
             connectedPlayers[conn.connectionId] = new PlayerInfo
             {
-                pseudo = player.steamUsername,
+                pseudo = pseudo,
                 logLine = logLine
             };
 
@@ -64,7 +116,7 @@ public class TKConnectLog : Plugin
             Debug.Log($"[TKLOG] JOIN {logLine}");
 
             // Annonce à tous les joueurs
-            Nova.server.SendMessageToAll(string.Format(JoinBroadcast, player.steamUsername));
+            Nova.server.SendMessageToAll(string.Format(JoinBroadcast, pseudo));
 
             // Message de bienvenue au joueur qui arrive
             player.SendText(WelcomeLine1);
@@ -72,13 +124,25 @@ public class TKConnectLog : Plugin
         }
         else
         {
+            connectedPlayers[conn.connectionId].pseudo = pseudo;
             connectedPlayers[conn.connectionId].logLine = logLine;
         }
     }
 
+    // Garde le hook officiel au cas où le jeu le câblerait un jour :
+    // HandleDisconnect retire le joueur du dictionnaire, donc pas de doublon possible.
     public override void OnPlayerDisconnect(NetworkConnection conn)
     {
         base.OnPlayerDisconnect(conn);
+        HandleDisconnect(conn);
+    }
+
+    private void HandleDisconnect(NetworkConnection conn)
+    {
+        if (conn == null)
+        {
+            return;
+        }
 
         if (connectedPlayers.TryGetValue(conn.connectionId, out PlayerInfo info))
         {
@@ -88,7 +152,14 @@ public class TKConnectLog : Plugin
             Debug.Log($"[TKLOG] LEAVE {info.logLine}");
 
             // Annonce à tous les joueurs restants
-            Nova.server.SendMessageToAll(string.Format(LeaveBroadcast, info.pseudo));
+            try
+            {
+                Nova.server.SendMessageToAll(string.Format(LeaveBroadcast, info.pseudo));
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError("[TKLOG] Erreur annonce départ : " + ex.Message);
+            }
         }
     }
 }
