@@ -75,6 +75,9 @@ public class TKConnectLog : Plugin
             else
             {
                 config = TKConnectConfig.FromJson(File.ReadAllText(configPath));
+                // Migration : réécrit le fichier avec toutes les clés pour que
+                // l'AutoMap AMP puisse écrire les nouveaux champs (couleurs...)
+                File.WriteAllText(configPath, TKConnectConfig.ToJson(config));
                 Debug.Log("[TKLOG] config.json chargé");
             }
         }
