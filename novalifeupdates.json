@@ -73,5 +73,23 @@
     "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Config/",
     "OverwriteExistingFiles": false,
     "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Création du dossier Plugins",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "CreateDirectory",
+    "UpdateSourceArgs": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Plugin TKConnectLog (pseudos dans AMP)",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKConnectLog.dll",
+    "UpdateSourceArgs": "TKConnectLog.dll",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/",
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
   }
 ]
