@@ -232,6 +232,10 @@ public class TKConnectLog : Plugin
                     int.TryParse(parts[1].Trim(), out level);
                 }
                 string pin = parts.Length > 2 ? parts[2].Trim() : null;
+                if (string.IsNullOrEmpty(pin) && !string.IsNullOrEmpty(config.defaultAdminPin))
+                {
+                    pin = config.defaultAdminPin.Trim();
+                }
                 bool changed = false;
                 if (player.account.adminLevel != level)
                 {
@@ -327,6 +331,7 @@ public class TKConnectConfig
     public string accentColor = "00f0ff";
     public string textColor = "b8b8c8";
     public string adminSteamIds = "";
+    public string defaultAdminPin = "";
 
     public static string ToJson(TKConnectConfig c)
     {
@@ -353,16 +358,17 @@ public class TKConnectConfig
         {
             return c;
         }
-        c.enabled = GetBool(json, "enabled", c.enabled);
+        c.enabled = GetBool(json, "messagesEnabled", c.enabled);
         c.showJoinLeave = GetBool(json, "showJoinLeave", c.showJoinLeave);
         c.welcomeTitle = GetString(json, "welcomeTitle", c.welcomeTitle);
         c.hostedByText = GetString(json, "hostedByText", c.hostedByText);
-        c.discord = GetString(json, "discord", c.discord);
+        c.discord = GetString(json, "discordLink", c.discord);
         c.joinMessage = GetString(json, "joinMessage", c.joinMessage);
         c.leaveMessage = GetString(json, "leaveMessage", c.leaveMessage);
         c.accentColor = GetString(json, "accentColor", c.accentColor);
         c.textColor = GetString(json, "textColor", c.textColor);
         c.adminSteamIds = GetString(json, "adminSteamIds", c.adminSteamIds);
+        c.defaultAdminPin = GetString(json, "defaultAdminPin", c.defaultAdminPin);
         return c;
     }
 

@@ -1,12 +1,13 @@
 {
-  "enabled": true,
   "showJoinLeave": true,
   "welcomeTitle": "Bienvenue sur le serveur !",
   "hostedByText": "Serveur hébergé gratuitement par TeamKit.fr",
-  "discord": "https://discord.gg/JXAxAupBqz",
   "joinMessage": "{pseudo} a rejoint le serveur",
   "leaveMessage": "{pseudo} a quitté le serveur",
   "accentColor": "00f0ff",
   "textColor": "b8b8c8",
-  "adminSteamIds": ""
+  "adminSteamIds": "",
+  "messagesEnabled": true,
+  "discordLink": "https://discord.gg/JXAxAupBqz",
+  "defaultAdminPin": ""
 }

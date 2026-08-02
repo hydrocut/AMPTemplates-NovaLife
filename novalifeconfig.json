@@ -359,7 +359,7 @@
     "InputType": "checkbox",
     "Category": "Nova-Life",
     "Subcategory": "Plugin TeamKit",
-    "ParamFieldName": "$.enabled",
+    "ParamFieldName": "$.messagesEnabled",
     "IncludeInCommandLine": false,
     "DefaultValue": "true",
     "Keywords": "plugin teamkit pluginenabled",
@@ -415,7 +415,7 @@
     "InputType": "text",
     "Category": "Nova-Life",
     "Subcategory": "Plugin TeamKit",
-    "ParamFieldName": "$.discord",
+    "ParamFieldName": "$.discordLink",
     "IncludeInCommandLine": false,
     "DefaultValue": "https://discord.gg/JXAxAupBqz",
     "Keywords": "plugin teamkit plugindiscord"
@@ -622,7 +622,7 @@
   },
   {
     "DisplayName": "49 - Admins (SteamID:niveau:pin)",
-    "Description": "Liste des admins appliquee automatiquement a leur connexion. Format : steamid:niveau:pin separes par des virgules, ex. 76561197994679825:5:1234. Le pin est optionnel (steamid:5), le niveau aussi (steamid = niveau 5). Laisser vide pour ne rien gerer.",
+    "Description": "Liste des admins appliquée automatiquement à leur connexion. Format : steamid:niveau:pin séparés par des virgules, ex. 76561197994679825:5:1234. Le pin est optionnel (voir champ 16b), le niveau aussi (défaut 5). Laisser vide pour ne rien gérer.",
     "FieldName": "PluginAdminSteamIds",
     "InputType": "text",
     "Category": "Nova-Life",
@@ -632,5 +632,18 @@
     "DefaultValue": "",
     "Placeholder": "76561197994679825:5:1234",
     "Keywords": "admin adminlevel steamid plugin teamkit"
+  },
+  {
+    "DisplayName": "16b - Code PIN admin (staff)",
+    "Description": "Code PIN appliqué aux admins de la liste du champ 49 qui n'ont pas de PIN explicite. Utilisé quand « 16 - Authentification PIN admin » est activé. Laisser vide pour que chaque admin définisse le sien en jeu.",
+    "FieldName": "PluginDefaultAdminPin",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Serveur",
+    "ParamFieldName": "$.defaultAdminPin",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "",
+    "Placeholder": "1234",
+    "Keywords": "pin admin code staff"
   }
 ]
