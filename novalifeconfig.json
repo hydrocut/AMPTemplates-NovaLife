@@ -681,24 +681,8 @@
     "Subcategory": "Plugin TeamKit",
     "ParamFieldName": "$.joinUrl",
     "IncludeInCommandLine": false,
-    "DefaultValue": "https://www.teamkit.fr/rejoindre.html",
+    "DefaultValue": "",
     "Placeholder": "https://www.teamkit.fr/rejoindre",
     "Keywords": "webhook discord pluginjoinurl"
-  },
-  {
-    "DisplayName": "4D - Éditer le même message Discord",
-    "Description": "Si activé (recommandé), le plugin édite toujours le même message Discord (statut permanent 🟢/🔴) au lieu d'en poster un nouveau à chaque démarrage/arrêt. Désactiver pour un historique de messages.",
-    "FieldName": "PluginWebhookEditMessage",
-    "InputType": "checkbox",
-    "Category": "Nova-Life",
-    "Subcategory": "Plugin TeamKit",
-    "ParamFieldName": "$.webhookEditMessage",
-    "IncludeInCommandLine": false,
-    "DefaultValue": "true",
-    "EnumValues": {
-      "True": "true",
-      "False": "false"
-    },
-    "Keywords": "webhook discord edition message statut"
   }
 ]
