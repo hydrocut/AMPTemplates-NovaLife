@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=4
-Meta.ReleaseNotes=Gestion de server.json et roleplay.json depuis AMP (nom, slots, whitelist, etc.), création automatique du dossier Servers/<profil> avec configs par défaut, et compteur de connexions dans les métriques.
+Meta.ConfigVersion=5
+Meta.ReleaseNotes=Detection des pseudos joueurs via le plugin TKConnectLog (lignes [TKLOG] JOIN/LEAVE).
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]
@@ -96,8 +96,8 @@ Console.FilterMatchRegex=
 Console.FilterMatchReplacement=
 Console.ThrowawayMessageRegex=(UnityMemory|memorysetup-|Shader |WARNING: Shader|ERROR: Shader|ALSA lib|FMOD|Invalid pass number|Trying to access pass|Couldn't create a Convex Mesh|Ran out of virtual channels|UnloadTime)
 Console.AppReadyRegex=.*(\[LIFE SERVER\] Server launched in|Server successfully logged on to the Steam master server).*
-Console.UserJoinRegex=.*Incoming connection:\s+::ffff:(?<username>[0-9\.]+)\s+-\s+[0-9]+\s+connections\..*
-Console.UserLeaveRegex=
+Console.UserJoinRegex=^\[TKLOG\] JOIN pseudo="(?<username>.+?)" steamid=(?<userid>\d+)$
+Console.UserLeaveRegex=^\[TKLOG\] LEAVE pseudo="(?<username>.+?)" steamid=(?<userid>\d+)$
 Console.UserChatRegex=
 Console.UpdateAvailableRegex=
 Console.PreConnectRegex=.*Incoming connection:\s+::ffff:(?<ip>[0-9\.]+)\s+-\s+[0-9]+\s+connections\..*
