@@ -645,5 +645,44 @@
     "DefaultValue": "",
     "Placeholder": "1234",
     "Keywords": "pin admin code staff"
+  },
+  {
+    "DisplayName": "4A - Webhook Discord (URL)",
+    "Description": "URL d'un webhook Discord. Le plugin y publie automatiquement « Serveur en ligne » au démarrage et « Serveur hors ligne » à l'arrêt, avec l'adresse de connexion et le lien Rejoindre. Laisser vide pour désactiver.",
+    "FieldName": "PluginWebhookUrl",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.webhookUrl",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "",
+    "Placeholder": "https://discord.com/api/webhooks/...",
+    "Keywords": "webhook discord pluginwebhookurl"
+  },
+  {
+    "DisplayName": "4B - Adresse publique du serveur",
+    "Description": "IP:port affichés dans le message Discord (connexion directe steam://connect/...).",
+    "FieldName": "PluginPublicAddress",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.publicAddress",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "51.254.47.151:7789",
+    "Placeholder": "51.254.47.151:7789",
+    "Keywords": "webhook discord pluginpublicaddress"
+  },
+  {
+    "DisplayName": "4C - Lien Rejoindre (https)",
+    "Description": "Lien cliquable « Rejoindre le serveur » dans le message Discord (ex. une page de votre site qui redirige vers steam://connect). Laisser vide pour ne pas l'afficher.",
+    "FieldName": "PluginJoinUrl",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.joinUrl",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "",
+    "Placeholder": "https://www.teamkit.fr/rejoindre",
+    "Keywords": "webhook discord pluginjoinurl"
   }
 ]
