@@ -12,5 +12,6 @@
   "defaultAdminPin": "",
   "webhookUrl": "",
   "publicAddress": "51.254.47.151:7789",
-  "joinUrl": ""
+  "joinUrl": "https://www.teamkit.fr/rejoindre.html",
+  "webhookEditMessage": true
 }

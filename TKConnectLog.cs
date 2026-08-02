@@ -55,7 +55,7 @@ public class TKConnectLog : Plugin
         HookDisconnectEvent();
         HookQuitEvent();
         SendServerStatusWebhook(online: true);
-        Debug.Log("[TKLOG] Plugin TKConnectLog v2.3 initialisé");
+        Debug.Log("[TKLOG] Plugin TKConnectLog v2.4 initialisé");
     }
 
     private void HookQuitEvent()
@@ -121,13 +121,13 @@ public class TKConnectLog : Plugin
 
             if (synchronous)
             {
-                PostWebhook(url, payload);
+                PostOrEditWebhook(url, payload);
             }
             else
             {
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate
                 {
-                    PostWebhook(url, payload);
+                    PostOrEditWebhook(url, payload);
                 });
             }
         }
@@ -137,18 +137,58 @@ public class TKConnectLog : Plugin
         }
     }
 
-    private static void PostWebhook(string url, string jsonPayload)
+    // Poste le message, ou édite le message existant pour éviter le spam
+    // (l'id du message est mémorisé dans Plugins/TKConnectLog/webhook_message.txt)
+    private void PostOrEditWebhook(string url, string jsonPayload)
     {
         try
         {
             System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+            string msgIdPath = Path.Combine(Path.GetDirectoryName(configPath), "webhook_message.txt");
+
+            // Tente d'abord d'éditer le message mémorisé
+            if (config.webhookEditMessage && File.Exists(msgIdPath))
+            {
+                string msgId = File.ReadAllText(msgIdPath).Trim();
+                if (msgId.Length > 0)
+                {
+                    try
+                    {
+                        using (var client = new System.Net.WebClient())
+                        {
+                            client.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
+                            client.Encoding = Encoding.UTF8;
+                            client.UploadString(url.TrimEnd('/') + "/messages/" + msgId, "PATCH", jsonPayload);
+                        }
+                        Debug.Log("[TKLOG] Webhook Discord mis à jour (message édité)");
+                        return;
+                    }
+                    catch
+                    {
+                        // Message supprimé côté Discord : on repart sur un nouveau message
+                    }
+                }
+            }
+
+            // Nouveau message (?wait=true pour récupérer son id)
+            string sep = url.Contains("?") ? "&" : "?";
+            string response;
             using (var client = new System.Net.WebClient())
             {
                 client.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
                 client.Encoding = Encoding.UTF8;
-                client.UploadString(url, "POST", jsonPayload);
+                response = client.UploadString(url + sep + "wait=true", "POST", jsonPayload);
             }
             Debug.Log("[TKLOG] Webhook Discord envoyé");
+
+            if (config.webhookEditMessage && !string.IsNullOrEmpty(response))
+            {
+                Match m = Regex.Match(response, "\"id\"\\s*:\\s*\"(?<id>\\d+)\"");
+                if (m.Success)
+                {
+                    File.WriteAllText(msgIdPath, m.Groups["id"].Value);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -444,6 +484,7 @@ public class TKConnectConfig
     public string webhookUrl = "";
     public string publicAddress = "";
     public string joinUrl = "";
+    public bool webhookEditMessage = true;
 
     public static string ToJson(TKConnectConfig c)
     {
@@ -462,7 +503,8 @@ public class TKConnectConfig
         sb.AppendLine("  \"defaultAdminPin\": \"" + Escape(c.defaultAdminPin) + "\",");
         sb.AppendLine("  \"webhookUrl\": \"" + Escape(c.webhookUrl) + "\",");
         sb.AppendLine("  \"publicAddress\": \"" + Escape(c.publicAddress) + "\",");
-        sb.AppendLine("  \"joinUrl\": \"" + Escape(c.joinUrl) + "\"");
+        sb.AppendLine("  \"joinUrl\": \"" + Escape(c.joinUrl) + "\",");
+        sb.AppendLine("  \"webhookEditMessage\": " + (c.webhookEditMessage ? "true" : "false"));
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -488,6 +530,7 @@ public class TKConnectConfig
         c.webhookUrl = GetString(json, "webhookUrl", c.webhookUrl);
         c.publicAddress = GetString(json, "publicAddress", c.publicAddress);
         c.joinUrl = GetString(json, "joinUrl", c.joinUrl);
+        c.webhookEditMessage = GetBool(json, "webhookEditMessage", c.webhookEditMessage);
         return c;
     }
 
