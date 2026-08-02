@@ -9,8 +9,5 @@
   "adminSteamIds": "",
   "messagesEnabled": true,
   "discordLink": "https://discord.gg/JXAxAupBqz",
-  "defaultAdminPin": "",
-  "webhookUrl": "",
-  "publicAddress": "51.254.47.151:7789",
-  "joinUrl": ""
+  "defaultAdminPin": ""
 }

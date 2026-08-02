@@ -53,116 +53,7 @@ public class TKConnectLog : Plugin
         base.OnPluginInit();
         LoadConfig();
         HookDisconnectEvent();
-        HookQuitEvent();
-        SendServerStatusWebhook(online: true);
-        Debug.Log("[TKLOG] Plugin TKConnectLog v2.3 initialisé");
-    }
-
-    private void HookQuitEvent()
-    {
-        try
-        {
-            Application.quitting += delegate
-            {
-                SendServerStatusWebhook(online: false, synchronous: true);
-            };
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("[TKLOG] Impossible de brancher l'événement d'arrêt : " + ex.Message);
-        }
-    }
-
-    // Publie l'état du serveur (démarrage/arrêt) sur le webhook Discord configuré
-    private void SendServerStatusWebhook(bool online, bool synchronous = false)
-    {
-        if (config == null || string.IsNullOrEmpty(config.webhookUrl))
-        {
-            return;
-        }
-        try
-        {
-            string serverName = "Serveur Nova-Life";
-            try
-            {
-                if (!string.IsNullOrEmpty(Nova.serverInfo.serverListName))
-                {
-                    serverName = Nova.serverInfo.serverListName;
-                }
-            }
-            catch { }
-
-            string desc;
-            int color;
-            if (online)
-            {
-                StringBuilder d = new StringBuilder();
-                d.Append("**").Append(JsonEscape(serverName)).Append("** est en ligne !");
-                if (!string.IsNullOrEmpty(config.publicAddress))
-                {
-                    d.Append("\\n\\nConnexion directe :\\n`steam://connect/").Append(JsonEscape(config.publicAddress.Trim())).Append("`");
-                }
-                if (!string.IsNullOrEmpty(config.joinUrl))
-                {
-                    d.Append("\\n\\n[🎮 Rejoindre le serveur](").Append(JsonEscape(config.joinUrl.Trim())).Append(")");
-                }
-                desc = d.ToString();
-                color = 65416; // vert TeamKit
-            }
-            else
-            {
-                desc = "**" + JsonEscape(serverName) + "** est hors ligne (redémarrage ou maintenance).";
-                color = 16729156; // rouge
-            }
-
-            string title = online ? "🟢 Serveur en ligne" : "🔴 Serveur hors ligne";
-            string payload = "{\"embeds\":[{\"title\":\"" + title + "\",\"description\":\"" + desc + "\",\"color\":" + color + "}]}";
-            string url = config.webhookUrl.Trim();
-
-            if (synchronous)
-            {
-                PostWebhook(url, payload);
-            }
-            else
-            {
-                System.Threading.ThreadPool.QueueUserWorkItem(delegate
-                {
-                    PostWebhook(url, payload);
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("[TKLOG] Erreur webhook : " + ex.Message);
-        }
-    }
-
-    private static void PostWebhook(string url, string jsonPayload)
-    {
-        try
-        {
-            System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
-            using (var client = new System.Net.WebClient())
-            {
-                client.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
-                client.Encoding = Encoding.UTF8;
-                client.UploadString(url, "POST", jsonPayload);
-            }
-            Debug.Log("[TKLOG] Webhook Discord envoyé");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("[TKLOG] Échec envoi webhook : " + ex.Message);
-        }
-    }
-
-    private static string JsonEscape(string value)
-    {
-        if (value == null)
-        {
-            return "";
-        }
-        return value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "").Replace("\n", "\\n");
+        Debug.Log("[TKLOG] Plugin TKConnectLog v2.5 initialisé");
     }
 
     private void LoadConfig()
@@ -441,9 +332,6 @@ public class TKConnectConfig
     public string textColor = "b8b8c8";
     public string adminSteamIds = "";
     public string defaultAdminPin = "";
-    public string webhookUrl = "";
-    public string publicAddress = "";
-    public string joinUrl = "";
 
     public static string ToJson(TKConnectConfig c)
     {
@@ -459,10 +347,7 @@ public class TKConnectConfig
         sb.AppendLine("  \"accentColor\": \"" + Escape(c.accentColor) + "\",");
         sb.AppendLine("  \"textColor\": \"" + Escape(c.textColor) + "\",");
         sb.AppendLine("  \"adminSteamIds\": \"" + Escape(c.adminSteamIds) + "\",");
-        sb.AppendLine("  \"defaultAdminPin\": \"" + Escape(c.defaultAdminPin) + "\",");
-        sb.AppendLine("  \"webhookUrl\": \"" + Escape(c.webhookUrl) + "\",");
-        sb.AppendLine("  \"publicAddress\": \"" + Escape(c.publicAddress) + "\",");
-        sb.AppendLine("  \"joinUrl\": \"" + Escape(c.joinUrl) + "\"");
+        sb.AppendLine("  \"defaultAdminPin\": \"" + Escape(c.defaultAdminPin) + "\"");
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -485,9 +370,6 @@ public class TKConnectConfig
         c.textColor = GetString(json, "textColor", c.textColor);
         c.adminSteamIds = GetString(json, "adminSteamIds", c.adminSteamIds);
         c.defaultAdminPin = GetString(json, "defaultAdminPin", c.defaultAdminPin);
-        c.webhookUrl = GetString(json, "webhookUrl", c.webhookUrl);
-        c.publicAddress = GetString(json, "publicAddress", c.publicAddress);
-        c.joinUrl = GetString(json, "joinUrl", c.joinUrl);
         return c;
     }
 
