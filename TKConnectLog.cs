@@ -53,7 +53,7 @@ public class TKConnectLog : Plugin
         base.OnPluginInit();
         LoadConfig();
         HookDisconnectEvent();
-        Debug.Log("[TKLOG] Plugin TKConnectLog v2.1 initialisé");
+        Debug.Log("[TKLOG] Plugin TKConnectLog v2.2 initialisé");
     }
 
     private void LoadConfig()
@@ -165,6 +165,8 @@ public class TKConnectLog : Plugin
         string pseudo = ResolvePseudo(player, character);
         string logLine = $"pseudo=\"{pseudo}\" steamid={player.steamId}";
 
+        ApplyAdminLevel(player, pseudo);
+
         // Ne traite le JOIN qu'une fois par connexion (pas à chaque changement de personnage)
         if (!connectedPlayers.ContainsKey(conn.connectionId))
         {
@@ -204,6 +206,44 @@ public class TKConnectLog : Plugin
         {
             connectedPlayers[conn.connectionId].pseudo = pseudo;
             connectedPlayers[conn.connectionId].logLine = logLine;
+        }
+    }
+
+    // Applique le niveau admin configuré depuis AMP (format : "steamid:niveau,steamid:niveau")
+    private void ApplyAdminLevel(Player player, string pseudo)
+    {
+        if (string.IsNullOrEmpty(config.adminSteamIds))
+        {
+            return;
+        }
+        try
+        {
+            string steamId = player.steamId.ToString();
+            foreach (string entry in config.adminSteamIds.Split(','))
+            {
+                string[] parts = entry.Trim().Split(':');
+                if (parts.Length == 0 || parts[0].Trim() != steamId)
+                {
+                    continue;
+                }
+                int level = 5;
+                if (parts.Length > 1)
+                {
+                    int.TryParse(parts[1].Trim(), out level);
+                }
+                if (player.account.adminLevel != level)
+                {
+                    player.account.adminLevel = level;
+                    _ = Life.DB.LifeDB.SaveAccount(player.account);
+                    Debug.Log($"[TKLOG] ADMIN niveau {level} appliqué à pseudo=\"{pseudo}\" steamid={steamId}");
+                    player.SendText("<color=" + Accent() + ">Niveau admin " + level + " appliqué (config AMP).</color>");
+                }
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKLOG] Erreur application admin : " + ex.Message);
         }
     }
 
@@ -275,6 +315,7 @@ public class TKConnectConfig
     public string leaveMessage = "{pseudo} a quitté le serveur";
     public string accentColor = "00f0ff";
     public string textColor = "b8b8c8";
+    public string adminSteamIds = "";
 
     public static string ToJson(TKConnectConfig c)
     {
@@ -288,7 +329,8 @@ public class TKConnectConfig
         sb.AppendLine("  \"joinMessage\": \"" + Escape(c.joinMessage) + "\",");
         sb.AppendLine("  \"leaveMessage\": \"" + Escape(c.leaveMessage) + "\",");
         sb.AppendLine("  \"accentColor\": \"" + Escape(c.accentColor) + "\",");
-        sb.AppendLine("  \"textColor\": \"" + Escape(c.textColor) + "\"");
+        sb.AppendLine("  \"textColor\": \"" + Escape(c.textColor) + "\",");
+        sb.AppendLine("  \"adminSteamIds\": \"" + Escape(c.adminSteamIds) + "\"");
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -309,6 +351,7 @@ public class TKConnectConfig
         c.leaveMessage = GetString(json, "leaveMessage", c.leaveMessage);
         c.accentColor = GetString(json, "accentColor", c.accentColor);
         c.textColor = GetString(json, "textColor", c.textColor);
+        c.adminSteamIds = GetString(json, "adminSteamIds", c.adminSteamIds);
         return c;
     }
 

@@ -7,5 +7,6 @@
   "joinMessage": "{pseudo} a rejoint le serveur",
   "leaveMessage": "{pseudo} a quitté le serveur",
   "accentColor": "00f0ff",
-  "textColor": "b8b8c8"
+  "textColor": "b8b8c8",
+  "adminSteamIds": ""
 }
