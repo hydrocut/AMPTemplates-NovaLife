@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "autoOpenOnSpawn": true,
+  "showOnlyFirstJoin": false,
+  "enableResetCommand": true,
+  "title": "TeamKit.fr | Nova-Life RP",
+  "subtitle": "Serveur RP français gratuit et communautaire",
+  "welcomeText": "TeamKit te souhaite la bienvenue. Respecte le RP, joue proprement, et construis ton histoire en ville.",
+  "rulesTitle": "Règlement TeamKit",
+  "rulesText": "1. Respect obligatoire entre joueurs.\n2. Pas de troll, freekill ou abus HRP.\n3. Respecte les scènes RP.\n4. Écoute le staff.\n5. Le serveur est gratuit : aide la communauté à grandir.",
+  "website": "https://www.teamkit.fr",
+  "discord": "https://discord.gg/JXAxAupBqz",
+  "enterButtonText": "Entrer",
+  "rulesButtonText": "Regles",
+  "closeButtonText": "Fermer",
+  "enterChatMessage": "Bienvenue sur TeamKit.fr | Nova-Life RP.",
+  "adMessage1": "Ce serveur est hébergé gratuitement par TeamKit.fr — découvre nos autres serveurs sur le site !",
+  "adMessage2": "Rejoins la communauté TeamKit sur Discord pour les événements et les annonces.",
+  "adMessage3": "TeamKit héberge aussi des serveurs DayZ, Eco et Garry's Mod — viens tester !"
+}

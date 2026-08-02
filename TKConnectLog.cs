@@ -10,7 +10,7 @@ using Mirror;
 using UnityEngine;
 
 /// <summary>
-/// TKConnectLog v2.0 — TeamKit.fr
+/// TKConnectLog v2.1 — TeamKit.fr
 ///
 /// 1) Écrit dans la console serveur des lignes normalisées à la connexion
 ///    et à la déconnexion des joueurs, pour qu'AMP affiche les pseudos
@@ -22,6 +22,8 @@ using UnityEngine;
 ///    aux joueurs (textes et lien Discord configurables via
 ///    Plugins/TKConnectLog/config.json — gérable depuis le panel AMP).
 ///
+/// v2.1 :
+///  - Couleurs configurables (accentColor / textColor)
 /// v2.0 :
 ///  - Configuration via config.json (Discord, messages, activation)
 ///  - Nettoyage des caractères invisibles dans les pseudos Steam
@@ -51,7 +53,7 @@ public class TKConnectLog : Plugin
         base.OnPluginInit();
         LoadConfig();
         HookDisconnectEvent();
-        Debug.Log("[TKLOG] Plugin TKConnectLog v2.0 initialisé");
+        Debug.Log("[TKLOG] Plugin TKConnectLog v2.1 initialisé");
     }
 
     private void LoadConfig()
@@ -183,15 +185,15 @@ public class TKConnectLog : Plugin
                 // Messages de bienvenue au joueur qui arrive
                 if (!string.IsNullOrEmpty(config.welcomeTitle))
                 {
-                    player.SendText("<color=#00f0ff>" + config.welcomeTitle + "</color>");
+                    player.SendText("<color=" + Accent() + ">" + config.welcomeTitle + "</color>");
                 }
                 if (!string.IsNullOrEmpty(config.hostedByText))
                 {
-                    player.SendText(config.hostedByText);
+                    player.SendText("<color=" + TextCol() + ">" + config.hostedByText + "</color>");
                 }
                 if (!string.IsNullOrEmpty(config.discord))
                 {
-                    player.SendText("<color=#7b8cff>Discord :</color> " + config.discord);
+                    player.SendText("<color=" + Accent() + ">Discord :</color> " + config.discord);
                 }
             }
         }
@@ -238,13 +240,23 @@ public class TKConnectLog : Plugin
         }
     }
 
-    private static string FormatBroadcast(string template, string pseudo)
+    private string Accent()
+    {
+        return "#" + (string.IsNullOrEmpty(config.accentColor) ? "00f0ff" : config.accentColor.TrimStart('#'));
+    }
+
+    private string TextCol()
+    {
+        return "#" + (string.IsNullOrEmpty(config.textColor) ? "b8b8c8" : config.textColor.TrimStart('#'));
+    }
+
+    private string FormatBroadcast(string template, string pseudo)
     {
         if (string.IsNullOrEmpty(template))
         {
             template = "{pseudo}";
         }
-        return "<color=#b8b8c8>" + template.Replace("{pseudo}", "</color><color=#00f0ff>" + pseudo + "</color><color=#b8b8c8>") + "</color>";
+        return "<color=" + TextCol() + ">" + template.Replace("{pseudo}", "</color><color=" + Accent() + ">" + pseudo + "</color><color=" + TextCol() + ">") + "</color>";
     }
 }
 
@@ -258,6 +270,8 @@ public class TKConnectConfig
     public string discord = "https://discord.gg/JXAxAupBqz";
     public string joinMessage = "{pseudo} a rejoint le serveur";
     public string leaveMessage = "{pseudo} a quitté le serveur";
+    public string accentColor = "00f0ff";
+    public string textColor = "b8b8c8";
 
     public static string ToJson(TKConnectConfig c)
     {
@@ -269,7 +283,9 @@ public class TKConnectConfig
         sb.AppendLine("  \"hostedByText\": \"" + Escape(c.hostedByText) + "\",");
         sb.AppendLine("  \"discord\": \"" + Escape(c.discord) + "\",");
         sb.AppendLine("  \"joinMessage\": \"" + Escape(c.joinMessage) + "\",");
-        sb.AppendLine("  \"leaveMessage\": \"" + Escape(c.leaveMessage) + "\"");
+        sb.AppendLine("  \"leaveMessage\": \"" + Escape(c.leaveMessage) + "\",");
+        sb.AppendLine("  \"accentColor\": \"" + Escape(c.accentColor) + "\",");
+        sb.AppendLine("  \"textColor\": \"" + Escape(c.textColor) + "\"");
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -288,6 +304,8 @@ public class TKConnectConfig
         c.discord = GetString(json, "discord", c.discord);
         c.joinMessage = GetString(json, "joinMessage", c.joinMessage);
         c.leaveMessage = GetString(json, "leaveMessage", c.leaveMessage);
+        c.accentColor = GetString(json, "accentColor", c.accentColor);
+        c.textColor = GetString(json, "textColor", c.textColor);
         return c;
     }
 

@@ -443,5 +443,181 @@
     "IncludeInCommandLine": false,
     "DefaultValue": "{pseudo} a quitté le serveur",
     "Keywords": "plugin teamkit pluginleavemessage"
+  },
+  {
+    "DisplayName": "47 - Couleur principale (hex)",
+    "Description": "Couleur d'accent des messages en jeu, en hexadécimal sans #. Défaut : 00f0ff (cyan TeamKit).",
+    "FieldName": "PluginAccentColor",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.accentColor",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "00f0ff",
+    "Keywords": "plugin pluginaccentcolor"
+  },
+  {
+    "DisplayName": "48 - Couleur du texte (hex)",
+    "Description": "Couleur du texte des annonces, en hexadécimal sans #. Défaut : b8b8c8 (gris clair).",
+    "FieldName": "PluginTextColor",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Plugin TeamKit",
+    "ParamFieldName": "$.textColor",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "b8b8c8",
+    "Keywords": "plugin plugintextcolor"
+  },
+  {
+    "DisplayName": "50 - Écran d'accueil activé",
+    "Description": "Affiche l'écran d'accueil TeamKitIntro à l'apparition des joueurs.",
+    "FieldName": "IntroEnabled",
+    "InputType": "checkbox",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.enabled",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "true",
+    "Keywords": "plugin introenabled",
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    }
+  },
+  {
+    "DisplayName": "51 - Seulement à la première connexion",
+    "Description": "Si activé, l'écran ne s'affiche qu'une fois par joueur. Sinon, à chaque connexion (mode pub).",
+    "FieldName": "IntroFirstJoinOnly",
+    "InputType": "checkbox",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.showOnlyFirstJoin",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "false",
+    "Keywords": "plugin introfirstjoinonly",
+    "EnumValues": {
+      "True": "true",
+      "False": "false"
+    }
+  },
+  {
+    "DisplayName": "52 - Titre",
+    "Description": "Titre de la fenêtre d'accueil.",
+    "FieldName": "IntroTitle",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.title",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "TeamKit.fr | Nova-Life RP",
+    "Keywords": "plugin introtitle"
+  },
+  {
+    "DisplayName": "53 - Sous-titre",
+    "Description": "Sous-titre affiché en haut de l'écran d'accueil.",
+    "FieldName": "IntroSubtitle",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.subtitle",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "Serveur RP français gratuit et communautaire",
+    "Keywords": "plugin introsubtitle"
+  },
+  {
+    "DisplayName": "54 - Texte de bienvenue",
+    "Description": "Texte principal de bienvenue. Tapez \\n pour un retour à la ligne.",
+    "FieldName": "IntroWelcomeText",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.welcomeText",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "TeamKit te souhaite la bienvenue. Respecte le RP, joue proprement, et construis ton histoire en ville.",
+    "Keywords": "plugin introwelcometext"
+  },
+  {
+    "DisplayName": "55 - Règlement",
+    "Description": "Texte du règlement (bouton Règles). Tapez \\n pour un retour à la ligne.",
+    "FieldName": "IntroRulesText",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.rulesText",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "1. Respect obligatoire entre joueurs.\\n2. Pas de troll, freekill ou abus HRP.\\n3. Respecte les scènes RP.\\n4. Écoute le staff.\\n5. Le serveur est gratuit : aide la communauté à grandir.",
+    "Keywords": "plugin introrulestext"
+  },
+  {
+    "DisplayName": "56 - Site web",
+    "Description": "Site affiché sur l'écran d'accueil. Laisser vide pour masquer.",
+    "FieldName": "IntroWebsite",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.website",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "https://www.teamkit.fr",
+    "Keywords": "plugin introwebsite"
+  },
+  {
+    "DisplayName": "57 - Discord",
+    "Description": "Discord affiché sur l'écran d'accueil. Laisser vide pour masquer.",
+    "FieldName": "IntroDiscord",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.discord",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "https://discord.gg/JXAxAupBqz",
+    "Keywords": "plugin introdiscord"
+  },
+  {
+    "DisplayName": "58 - Message chat après Entrer",
+    "Description": "Message envoyé dans le chat quand le joueur clique sur Entrer.",
+    "FieldName": "IntroEnterChatMessage",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.enterChatMessage",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "Bienvenue sur TeamKit.fr | Nova-Life RP.",
+    "Keywords": "plugin introenterchatmessage"
+  },
+  {
+    "DisplayName": "59 - Pub rotative 1",
+    "Description": "Message « Le saviez-vous ? » n°1. Les pubs tournent à chaque affichage. Laisser vide pour désactiver.",
+    "FieldName": "IntroAd1",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.adMessage1",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "Ce serveur est hébergé gratuitement par TeamKit.fr — découvre nos autres serveurs sur le site !",
+    "Keywords": "plugin introad1"
+  },
+  {
+    "DisplayName": "60 - Pub rotative 2",
+    "Description": "Message « Le saviez-vous ? » n°2.",
+    "FieldName": "IntroAd2",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.adMessage2",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "Rejoins la communauté TeamKit sur Discord pour les événements et les annonces.",
+    "Keywords": "plugin introad2"
+  },
+  {
+    "DisplayName": "61 - Pub rotative 3",
+    "Description": "Message « Le saviez-vous ? » n°3.",
+    "FieldName": "IntroAd3",
+    "InputType": "text",
+    "Category": "Nova-Life",
+    "Subcategory": "Écran d'accueil",
+    "ParamFieldName": "$.adMessage3",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "TeamKit héberge aussi des serveurs DayZ, Eco et Garry's Mod — viens tester !",
+    "Keywords": "plugin introad3"
   }
 ]

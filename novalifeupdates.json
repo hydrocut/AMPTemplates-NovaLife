@@ -109,5 +109,33 @@
     "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKConnectLog/",
     "OverwriteExistingFiles": false,
     "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Création du dossier TeamKitIntro",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "CreateDirectory",
+    "UpdateSourceArgs": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TeamKitIntro",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Config par défaut - plugin TeamKitIntro",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TeamKitIntro-config.json",
+    "UpdateSourceArgs": "config.json",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TeamKitIntro/",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Plugin TeamKitIntro (écran d'accueil)",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TeamKitIntro.dll",
+    "UpdateSourceArgs": "TeamKitIntro.dll",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/",
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
   }
 ]
