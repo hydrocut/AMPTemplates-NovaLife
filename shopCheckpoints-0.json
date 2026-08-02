@@ -1,0 +1,245 @@
+{
+  "informations": "https://sites.google.com/view/nova-life-wiki/aides/config-serveur",
+  "checkpoints": [
+    {
+      "uniqueId": "44a5157d-84d9-44f9-bb30-595674ed0827",
+      "displayName": "ProSign - Rebords",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": -117.821,
+        "y": 34.44,
+        "z": -552.31
+      }
+    },
+    {
+      "uniqueId": "86706d7a-56db-4390-84e4-5b1b0c8be495",
+      "displayName": "Dépôt Presto - Extérieur",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 412.14,
+        "y": 50.036,
+        "z": 925.868
+      }
+    },
+    {
+      "uniqueId": "13bf8e33-0d7f-4385-a0ae-17f59a6d0623",
+      "displayName": "Dépôt Presto - Construction",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 396.484,
+        "y": 50.036,
+        "z": 933.969
+      }
+    },
+    {
+      "uniqueId": "dde00df4-5312-45ac-a251-8ab328fe9c78",
+      "displayName": "Banque",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 356.61,
+        "y": 49.992,
+        "z": 857.95
+      }
+    },
+    {
+      "uniqueId": "4525064a-6e06-4fce-a99a-5e96ec5221fc",
+      "displayName": "Wooden Art",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 582.635,
+        "y": 50.03,
+        "z": 1754.839
+      }
+    },
+    {
+      "uniqueId": "9b8e3568-fc30-4405-af8a-8993f6ec384c",
+      "displayName": "Librairie",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": -27.958,
+        "y": 46.914,
+        "z": 576.873
+      }
+    },
+    {
+      "uniqueId": "05423316-b9f0-4faa-bea8-d4b1958e337e",
+      "displayName": "GeTool",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 1053.947,
+        "y": 52.5,
+        "z": -543.372
+      }
+    },
+    {
+      "uniqueId": "20ecad7a-f84a-4912-abf3-7573075fd109",
+      "displayName": "ProSign - Autre",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": -123.642,
+        "y": 34.44,
+        "z": -538.476
+      }
+    },
+    {
+      "uniqueId": "e802bc77-6a41-4c5d-9dd6-c6dd25d68256",
+      "displayName": "Reigneire - Station essence / Gas station",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 246.519,
+        "y": 45.213,
+        "z": -1249.206
+      }
+    },
+    {
+      "uniqueId": "7c9aa0b6-db48-4c29-88a9-c256b22fd26c",
+      "displayName": "La Fuye - Station essence / Gas station",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": -390.22,
+        "y": 21.983,
+        "z": -486.171
+      }
+    },
+    {
+      "uniqueId": "9fc0de22-adbd-4772-9b78-5850cfca04ce",
+      "displayName": "Amboise Nord - Station essence / Gas station",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 384.633,
+        "y": 50.016,
+        "z": 784.071
+      }
+    },
+    {
+      "uniqueId": "f515e474-ca8b-4ba9-8a15-4605ac82f02c",
+      "displayName": "ProSign - Panneaux",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": -105.749,
+        "y": 34.44,
+        "z": -551.455
+      }
+    },
+    {
+      "uniqueId": "6e7d35c1-eb37-4bdd-90ae-ff566dd4d48a",
+      "displayName": "Dépôt Presto - Chambre",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 396.223,
+        "y": 58.036,
+        "z": 949.559
+      }
+    },
+    {
+      "uniqueId": "60fb703e-c379-47c2-b534-dfb7e4622e05",
+      "displayName": "Dépôt Presto - Cuisine",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 415.32,
+        "y": 58.036,
+        "z": 956.42
+      }
+    },
+    {
+      "uniqueId": "aaa0fed2-0779-4ca8-9f80-82bcffd41340",
+      "displayName": "Dépôt Presto - Module",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 393.556,
+        "y": 62.036,
+        "z": 949.945
+      }
+    },
+    {
+      "uniqueId": "cd909841-f922-4b7f-ac49-7efada2b598f",
+      "displayName": "Dépôt Presto - Salon",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 412.263,
+        "y": 54.036,
+        "z": 956.829
+      }
+    },
+    {
+      "uniqueId": "32c6871f-3ae8-44b8-805b-5ac4c0e30b5b",
+      "displayName": "Dépôt Presto - Divers",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 413.306,
+        "y": 50.036,
+        "z": 930.212
+      }
+    },
+    {
+      "uniqueId": "7a263fca-3a03-4f85-967a-26b77dca781d",
+      "displayName": "Dépôt Presto - Bar",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 396.572,
+        "y": 54.0100021,
+        "z": 940.057
+      }
+    },
+    {
+      "uniqueId": "ee1454f1-bd66-4310-a943-b07010b0c6cf",
+      "displayName": "IllegalPoint",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 885.861,
+        "y": 52.3957672,
+        "z": -983.758
+      }
+    },
+    {
+      "uniqueId": "23793d7b-6b7b-4e0b-a979-3a9abe296668",
+      "displayName": "MoneyPrintShop",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 882.051,
+        "y": 52.68,
+        "z": -988.942
+      }
+    },
+    {
+      "uniqueId": "e6eac6a4-2cbf-4713-8c25-d2f992fe3637",
+      "displayName": "AgroAlim",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 1023.381,
+        "y": 52.512,
+        "z": -706.292
+      }
+    },
+    {
+      "uniqueId": "e458c153-6c6a-4c5c-961b-bb682d28b90d",
+      "displayName": "ProSign - Barrières",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": -114.69,
+        "y": 34.44,
+        "z": -545.73
+      }
+    },
+    {
+      "uniqueId": "d6f4d10a-7b64-4f56-849b-b4f85a6c5de6",
+      "displayName": "Dépôt Presto - Électronique",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 393.73,
+        "y": 58.036,
+        "z": 959.73
+      }
+    },
+    {
+      "uniqueId": "68175b76-6596-494e-acc1-71d456653470",
+      "displayName": "Dépôt Presto - SdB",
+      "showCheckpoint": true,
+      "checkpointPosition": {
+        "x": 397.0,
+        "y": 58.036,
+        "z": 961.036
+      }
+    }
+  ]
+}

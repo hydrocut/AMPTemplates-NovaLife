@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "ConfigFile": "Servers/{{ServerProfile}}/Config/server.json",
+    "AutoMap": true,
+    "ConfigType": "json"
+  },
+  {
+    "ConfigFile": "Servers/{{ServerProfile}}/Config/roleplay.json",
+    "AutoMap": true,
+    "ConfigType": "json"
+  }
+]

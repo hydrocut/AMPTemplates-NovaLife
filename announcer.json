@@ -1,5 +1,10 @@
 {
+  "informations": "https://sites.google.com/view/nova-life-wiki/aides/config-serveur",
   "active": true,
-  "message": "Bienvenue sur TeamKit Nova-Life RP",
-  "secondsInterval": 300.0
+  "announces": [
+    {
+      "message": "This is an announce example. You can config this message in Config/announcer.json",
+      "secondsInterval": 300.0
+    }
+  ]
 }

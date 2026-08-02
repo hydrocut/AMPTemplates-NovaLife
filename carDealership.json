@@ -1,14 +1,48 @@
 {
+  "informations": "https://sites.google.com/view/nova-life-wiki/aides/config-serveur",
   "carShopName": "Concessionnaire automobile",
   "shopPosition": {
     "x": 624.16,
     "y": 50.02,
     "z": 975.82
   },
-  "vehicles": [
+  "carForSales": [
     {
       "modelId": 16,
       "price": 3500
+    },
+    {
+      "modelId": 15,
+      "price": 5990
+    },
+    {
+      "modelId": 0,
+      "price": 11990
+    },
+    {
+      "modelId": 8,
+      "price": 17190
+    },
+    {
+      "modelId": 13,
+      "price": 23558
+    },
+    {
+      "modelId": 24,
+      "price": 39550
+    },
+    {
+      "modelId": 10,
+      "price": 64650
+    },
+    {
+      "modelId": 14,
+      "price": 94000
     }
-  ]
+  ],
+  "garagePosition": {
+    "x": 608.453,
+    "y": 50.02942,
+    "z": 995.237
+  }
 }
