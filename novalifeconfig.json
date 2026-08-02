@@ -621,8 +621,8 @@
     "Keywords": "plugin introad3"
   },
   {
-    "DisplayName": "49 - Admins (SteamID:niveau)",
-    "Description": "Liste des admins appliquée automatiquement à leur connexion. Format : steamid:niveau séparés par des virgules, ex. 76561197994679825:5,76561198000000000:3. Niveau 5 si omis. Laisser vide pour ne rien gérer.",
+    "DisplayName": "49 - Admins (SteamID:niveau:pin)",
+    "Description": "Liste des admins appliquee automatiquement a leur connexion. Format : steamid:niveau:pin separes par des virgules, ex. 76561197994679825:5:1234. Le pin est optionnel (steamid:5), le niveau aussi (steamid = niveau 5). Laisser vide pour ne rien gerer.",
     "FieldName": "PluginAdminSteamIds",
     "InputType": "text",
     "Category": "Nova-Life",
@@ -630,7 +630,7 @@
     "ParamFieldName": "$.adminSteamIds",
     "IncludeInCommandLine": false,
     "DefaultValue": "",
-    "Placeholder": "76561197994679825:5",
+    "Placeholder": "76561197994679825:5:1234",
     "Keywords": "admin adminlevel steamid plugin teamkit"
   }
 ]

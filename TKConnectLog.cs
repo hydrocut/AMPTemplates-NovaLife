@@ -231,11 +231,22 @@ public class TKConnectLog : Plugin
                 {
                     int.TryParse(parts[1].Trim(), out level);
                 }
+                string pin = parts.Length > 2 ? parts[2].Trim() : null;
+                bool changed = false;
                 if (player.account.adminLevel != level)
                 {
                     player.account.adminLevel = level;
+                    changed = true;
+                }
+                if (!string.IsNullOrEmpty(pin) && player.account.adminPin != pin)
+                {
+                    player.account.adminPin = pin;
+                    changed = true;
+                }
+                if (changed)
+                {
                     _ = Life.DB.LifeDB.SaveAccount(player.account);
-                    Debug.Log($"[TKLOG] ADMIN niveau {level} appliqué à pseudo=\"{pseudo}\" steamid={steamId}");
+                    Debug.Log($"[TKLOG] ADMIN niveau {level}{(pin != null ? " + PIN" : "")} appliqué à pseudo=\"{pseudo}\" steamid={steamId}");
                     player.SendText("<color=" + Accent() + ">Niveau admin " + level + " appliqué (config AMP).</color>");
                 }
                 return;
