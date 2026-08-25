@@ -289,7 +289,7 @@ public class TKWebPanel : Plugin
             InitActivity();
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.3 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.3.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -1566,11 +1566,12 @@ public class TKWebPanel : Plugin
             StringBuilder sb = new StringBuilder();
             sb.Append("[");
             bool first = true;
+            HashSet<int> seen = new HashSet<int>();
             foreach (LifeVehicle v in Nova.v.vehicles)
             {
-                if (v == null || v.permissions == null)
+                if (v == null || v.permissions == null || !seen.Add(v.vehicleId))
                 {
-                    continue;
+                    continue; // null ou doublon en mémoire
                 }
                 bool owns = false;
                 try { owns = v.permissions.HasPermission(charId); } catch { }
@@ -1621,6 +1622,12 @@ public class TKWebPanel : Plugin
         }
         return (string)RunOnMain(delegate
         {
+            // le jeu peut déjà avoir ajouté le véhicule à sa liste : pas de doublon
+            if (Nova.v.GetVehicle(row.Id) != null)
+            {
+                Debug.Log("[TKWEB] GIVEVEHICLE steamid=" + steamId + " vehicleId=" + row.Id + " (déjà en mémoire, pas de double ajout)");
+                return "{\"ok\":true,\"vehicleId\":" + row.Id + ",\"note\":\"véhicule ajouté au garage du joueur\"}";
+            }
             Nova.v.vehicles.Add(new LifeVehicle
             {
                 modelId = row.ModelId,
@@ -2046,11 +2053,12 @@ public class TKWebPanel : Plugin
             StringBuilder sb = new StringBuilder();
             sb.Append("[");
             bool first = true;
+            HashSet<int> seen = new HashSet<int>();
             foreach (LifeVehicle v in Nova.v.vehicles)
             {
-                if (v == null || v.permissions == null)
+                if (v == null || v.permissions == null || !seen.Add(v.vehicleId))
                 {
-                    continue;
+                    continue; // null ou doublon en mémoire
                 }
                 bool owns = false;
                 try { owns = v.permissions.HasPermission(characterId); } catch { }
