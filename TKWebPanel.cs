@@ -107,6 +107,15 @@ public class TKWebPanel : Plugin
     // ------------------------------------------------------------------
     // Journal d'activité : PvP, drogue, commandes (v2.2)
     // ------------------------------------------------------------------
+    // nom du compte panel qui effectue la requete en cours (approximation
+    // suffisante pour un panel a faible trafic)
+    private static volatile string panelActor = "owner";
+
+    private static void StaffLog(string detail)
+    {
+        RecordActivity("STAFF", "[" + panelActor + "]", "", detail);
+    }
+
     private static readonly object actLock = new object();
     private static readonly List<string> actRing = new List<string>();
     private static long actLastId;
@@ -154,6 +163,32 @@ public class TKWebPanel : Plugin
         return "?";
     }
 
+    // Supprime les fichiers journaliers plus vieux que retentionDays
+    private static void CleanupOldLogs(string dir, string prefix, int retentionDays)
+    {
+        try
+        {
+            if (dir == null || !Directory.Exists(dir))
+            {
+                return;
+            }
+            DateTime limit = DateTime.Now.Date.AddDays(-retentionDays);
+            foreach (string f in Directory.GetFiles(dir, prefix + "*.log"))
+            {
+                Match m = Regex.Match(Path.GetFileName(f), prefix + @"(\d{4}-\d{2}-\d{2})\.log$");
+                DateTime d;
+                if (m.Success && DateTime.TryParse(m.Groups[1].Value, out d) && d < limit)
+                {
+                    File.Delete(f);
+                    Debug.Log("[TKWEB] Log purgé (> " + retentionDays + " j) : " + Path.GetFileName(f));
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private void InitActivity()
     {
         try
@@ -163,6 +198,7 @@ public class TKWebPanel : Plugin
             {
                 Directory.CreateDirectory(actDir);
             }
+            CleanupOldLogs(actDir, "activity-", config.logRetentionDays);
             if (Nova.server == null)
             {
                 return;
@@ -231,6 +267,7 @@ public class TKWebPanel : Plugin
             {
                 Directory.CreateDirectory(chatDir);
             }
+            CleanupOldLogs(chatDir, "chat-", config.logRetentionDays);
             // recharge la fin du fichier du jour pour garder l'historique après restart
             string today = Path.Combine(chatDir, "chat-" + DateTime.Now.ToString("yyyy-MM-dd") + ".log");
             if (File.Exists(today))
@@ -289,7 +326,7 @@ public class TKWebPanel : Plugin
             InitActivity();
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.3.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.4 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -717,6 +754,7 @@ public class TKWebPanel : Plugin
             status = 401;
             return "{\"error\":\"non authentifié\"}";
         }
+        panelActor = authUser;
         int need = MinLevel(path);
         if (path == "/api/fps" && ctx.Request.HttpMethod != "GET")
         {
@@ -1039,6 +1077,7 @@ public class TKWebPanel : Plugin
             try { if (p.account != null) { p.account.kicks++; LifeDB.SaveAccount(p.account); } } catch { }
             p.Disconnect("Kick : " + reason);
             Debug.Log("[TKWEB] KICK steamid=" + steamId + " raison=\"" + reason + "\"");
+            StaffLog("kick de " + steamId + " (" + reason + ")");
             return "{\"ok\":true}";
         });
     }
@@ -1064,6 +1103,7 @@ public class TKWebPanel : Plugin
             LifeDB.SaveAccount(p.account);
             p.Disconnect("Banni : " + reason);
             Debug.Log("[TKWEB] BAN steamid=" + steamId + " duree=" + (minutes <= 0 ? "permanent" : minutes + " min") + " raison=\"" + reason + "\"");
+            StaffLog("ban de " + steamId + " " + (minutes <= 0 ? "permanent" : minutes + " min") + " (" + reason + ")");
             return "{\"ok\":true,\"online\":true}";
         });
         if (onlineResult != null)
@@ -1082,6 +1122,7 @@ public class TKWebPanel : Plugin
         account.bans++;
         bool saved = LifeDB.SaveAccount(account).Result;
         Debug.Log("[TKWEB] BAN (offline) steamid=" + steamId + " duree=" + (minutes <= 0 ? "permanent" : minutes + " min") + " raison=\"" + reason + "\"");
+        StaffLog("ban (hors ligne) de " + steamId + " " + (minutes <= 0 ? "permanent" : minutes + " min") + " (" + reason + ")");
         return saved ? "{\"ok\":true,\"online\":false}" : "{\"error\":\"échec sauvegarde\"}";
     }
 
@@ -1097,6 +1138,7 @@ public class TKWebPanel : Plugin
         account.banReason = "";
         bool saved = LifeDB.SaveAccount(account).Result;
         Debug.Log("[TKWEB] UNBAN steamid=" + steamId);
+        StaffLog("deban de " + steamId);
         return saved ? "{\"ok\":true}" : "{\"error\":\"échec sauvegarde\"}";
     }
 
@@ -1150,6 +1192,7 @@ public class TKWebPanel : Plugin
                 p.AddMoney(amount, "Panel admin TKWebPanel");
             }
             Debug.Log("[TKWEB] MONEY steamid=" + steamId + " " + target + " " + (amount > 0 ? "+" : "") + amount);
+            StaffLog("argent " + (amount > 0 ? "+" : "") + amount.ToString("0") + " (" + target + ") a " + steamId);
             return "{\"ok\":true}";
         });
     }
@@ -1189,6 +1232,7 @@ public class TKWebPanel : Plugin
             }
             Nova.server.SendMessageToAll("<color=#ff8800>[ANNONCE]</color> <color=#ffffff>" + text + "</color>");
             Debug.Log("[TKWEB] ANNONCE \"" + text + "\"");
+            StaffLog("annonce : " + text);
             return "{\"ok\":true}";
         });
     }
@@ -1206,6 +1250,7 @@ public class TKWebPanel : Plugin
             p.Health = 100;
             p.SendText("<color=#00f0ff>Vous avez été soigné par un administrateur.</color>");
             Debug.Log("[TKWEB] HEAL steamid=" + steamId);
+            StaffLog("soigne " + steamId);
             return "{\"ok\":true}";
         });
     }
@@ -1229,6 +1274,7 @@ public class TKWebPanel : Plugin
             }
             p.setup.TargetSetPosition(new Vector3((float)x, (float)y, (float)z));
             Debug.Log("[TKWEB] TP steamid=" + steamId + " -> " + x + "," + y + "," + z);
+            StaffLog("teleporte " + steamId + " vers " + (int)x + "," + (int)y + "," + (int)z);
             return "{\"ok\":true}";
         });
     }
@@ -1248,6 +1294,7 @@ public class TKWebPanel : Plugin
             Vector3 pos = t.setup.transform.position;
             p.setup.TargetSetPosition(pos + new Vector3(1f, 0.5f, 1f));
             Debug.Log("[TKWEB] BRING steamid=" + steamId + " -> " + targetSteamId);
+            StaffLog("teleporte " + steamId + " vers le joueur " + targetSteamId);
             return "{\"ok\":true}";
         });
     }
@@ -1338,6 +1385,7 @@ public class TKWebPanel : Plugin
                 PersistFpsConfig(cfg);
             }
             Debug.Log("[TKWEB] FPS " + (force > 0 ? "forcé à " + force : (force == -1 ? "repassé en auto" : "config modifiée")));
+            StaffLog("FPS " + (force > 0 ? "force a " + force : (force == -1 ? "repasse en auto" : "config modifiee")));
             return "{\"ok\":true}";
         });
     }
@@ -1456,6 +1504,7 @@ public class TKWebPanel : Plugin
                 return give ? "{\"error\":\"inventaire plein ou item invalide\"}" : "{\"error\":\"le joueur n'a pas assez de cet item\"}";
             }
             Debug.Log("[TKWEB] " + (give ? "GIVEITEM" : "REMOVEITEM") + " steamid=" + steamId + " item=" + itemId + " x" + amount);
+            StaffLog((give ? "donne " : "retire ") + amount + "x item " + itemId + (give ? " a " : " de ") + steamId);
             return "{\"ok\":true}";
         });
     }
@@ -1625,7 +1674,8 @@ public class TKWebPanel : Plugin
             // le jeu peut déjà avoir ajouté le véhicule à sa liste : pas de doublon
             if (Nova.v.GetVehicle(row.Id) != null)
             {
-                Debug.Log("[TKWEB] GIVEVEHICLE steamid=" + steamId + " vehicleId=" + row.Id + " (déjà en mémoire, pas de double ajout)");
+                Debug.Log("[TKWEB] GIVEVEHICLE steamid=" + steamId + " vehicleId=" + row.Id + " (déjà en mémoire)");
+                StaffLog("donne le vehicule #" + row.Id + " a " + steamId);
                 return "{\"ok\":true,\"vehicleId\":" + row.Id + ",\"note\":\"véhicule ajouté au garage du joueur\"}";
             }
             Nova.v.vehicles.Add(new LifeVehicle
@@ -1653,6 +1703,7 @@ public class TKWebPanel : Plugin
                 accessoriesData = row.AccessoriesData
             });
             Debug.Log("[TKWEB] GIVEVEHICLE steamid=" + steamId + " model=" + modelId + " (" + VehicleModelName(modelId) + ") vehicleId=" + row.Id);
+            StaffLog("donne le vehicule " + VehicleModelName(modelId) + " (#" + row.Id + ") a " + steamId);
             return "{\"ok\":true,\"vehicleId\":" + row.Id + ",\"note\":\"véhicule ajouté au garage du joueur\"}";
         });
     }
@@ -1669,6 +1720,7 @@ public class TKWebPanel : Plugin
             }
             Nova.v.StowVehicle(vehicleId);
             Debug.Log("[TKWEB] STOW vehicleId=" + vehicleId);
+            StaffLog("range le vehicule #" + vehicleId + " au garage");
             return "{\"ok\":true}";
         });
     }
@@ -1696,6 +1748,7 @@ public class TKWebPanel : Plugin
             Vector3 pos = p.setup.transform.position + new Vector3(3f, 0.5f, 3f);
             bool ok = Nova.v.UnstowVehicle(vehicleId, pos, Quaternion.identity);
             Debug.Log("[TKWEB] UNSTOW vehicleId=" + vehicleId + " près de " + steamId);
+            StaffLog("sort le vehicule #" + vehicleId + " pres de " + steamId);
             return ok ? "{\"ok\":true}" : "{\"error\":\"échec de sortie du véhicule\"}";
         });
     }
@@ -1729,6 +1782,7 @@ public class TKWebPanel : Plugin
                 Nova.v.vehicles.Remove(v);
             }
             Debug.Log("[TKWEB] DELETEVEHICLE vehicleId=" + vehicleId);
+            StaffLog("supprime le vehicule #" + vehicleId);
             return removed ? "{\"ok\":true}" : "{\"error\":\"échec suppression en base\"}";
         });
     }
@@ -2033,6 +2087,7 @@ public class TKWebPanel : Plugin
             }
             conn.Execute("UPDATE Characters SET Inventory = ? WHERE Id = ?", updated, characterId);
             Debug.Log("[TKWEB] OFFLINE-REMOVEITEM charId=" + characterId + " item=" + itemId + " x" + removed);
+            StaffLog("retire (hors ligne) " + removed + "x item " + itemId + " du perso #" + characterId);
             return "{\"ok\":true,\"removed\":" + removed + "}";
         }
         finally
@@ -2602,6 +2657,7 @@ public class TKWebPanel : Plugin
             {
             }
             Debug.Log("[TKWEB] SETADMIN steamid=" + steamId + " niveau=" + level + " (en ligne)");
+            StaffLog("niveau admin " + level + " pour " + steamId);
             return "{\"ok\":true,\"online\":true}";
         });
         if (onlineResult != null)
@@ -2620,6 +2676,7 @@ public class TKWebPanel : Plugin
         }
         bool saved = LifeDB.SaveAccount(account).Result;
         Debug.Log("[TKWEB] SETADMIN steamid=" + steamId + " niveau=" + level + " (hors ligne)");
+        StaffLog("niveau admin " + level + " pour " + steamId + " (hors ligne)");
         return saved ? "{\"ok\":true,\"online\":false}" : "{\"error\":\"échec sauvegarde\"}";
     }
 
@@ -2665,6 +2722,7 @@ public class TKWebPanel : Plugin
             p.SetPrisonTime(minutes);
             p.Notify("Justice", minutes > 0 ? ("Vous êtes emprisonné " + minutes + " minutes") : "Vous êtes libéré");
             Debug.Log("[TKWEB] PRISON steamid=" + steamId + " minutes=" + minutes);
+            StaffLog(minutes > 0 ? ("emprisonne " + steamId + " " + minutes + " min") : ("libere " + steamId));
             return "{\"ok\":true}";
         });
     }
@@ -2687,6 +2745,7 @@ public class TKWebPanel : Plugin
             p.GiveXP(amount);
             p.Notify("Expérience", "+" + amount + " XP (staff)");
             Debug.Log("[TKWEB] GIVEXP steamid=" + steamId + " +" + amount);
+            StaffLog("donne " + amount + " XP a " + steamId);
             return "{\"ok\":true}";
         });
     }
@@ -2787,7 +2846,7 @@ public class TKWebPanel : Plugin
                 return "{\"error\":\"serveur indisponible\"}";
             }
             Nova.server.SendMessageToAdmins("<color=#ffb454>[STAFF→ADMINS]</color> " + text);
-            RecordActivity("STAFF", "[PANEL]", "", "message aux admins : " + text);
+            StaffLog("message aux admins : " + text);
             return "{\"ok\":true}";
         });
     }
@@ -2810,7 +2869,7 @@ public class TKWebPanel : Plugin
             }
             Vector3 pos = p.setup.transform.position;
             Nova.server.SendLocalText("<color=#00f0ff>[LOCAL]</color> " + text, (float)range, pos);
-            RecordActivity("STAFF", "[PANEL]", "", "message local (" + (int)range + " m autour de " + PseudoOf(p) + ") : " + text);
+            StaffLog("message local (" + (int)range + " m autour de " + PseudoOf(p) + ") : " + text);
             return "{\"ok\":true}";
         });
     }
@@ -2833,7 +2892,7 @@ public class TKWebPanel : Plugin
             p.character.PermisPoints = points;
             LifeDB.SaveCharacter(p.character);
             p.Notify("Permis", "Vos points de permis : " + points + "/12");
-            RecordActivity("STAFF", "[PANEL]", "", "points de permis de " + PseudoOf(p) + " fixés à " + points);
+            StaffLog("points de permis de " + PseudoOf(p) + " fixes a " + points);
             Debug.Log("[TKWEB] PERMIS steamid=" + steamId + " points=" + points);
             return "{\"ok\":true}";
         });
@@ -3310,6 +3369,8 @@ public class TKWebPanelConfig
     public bool ansiColors = true;
     // URL publique complète affichée dans la bannière (ex. https://nova-life.teamkit.fr/vizu/)
     public string publicUrl = "";
+    // Conservation des historiques chat + journal d'activité (jours, min 92 = 3 mois)
+    public int logRetentionDays = 92;
 
     public static string ToJson(TKWebPanelConfig c)
     {
@@ -3321,7 +3382,8 @@ public class TKWebPanelConfig
         sb.AppendLine("  \"allocatedCores\": " + c.allocatedCores + ",");
         sb.AppendLine("  \"publicHost\": " + Json.Str(c.publicHost) + ",");
         sb.AppendLine("  \"ansiColors\": " + (c.ansiColors ? "true" : "false") + ",");
-        sb.AppendLine("  \"publicUrl\": " + Json.Str(c.publicUrl));
+        sb.AppendLine("  \"publicUrl\": " + Json.Str(c.publicUrl) + ",");
+        sb.AppendLine("  \"logRetentionDays\": " + c.logRetentionDays);
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -3340,6 +3402,8 @@ public class TKWebPanelConfig
         c.publicHost = Json.GetString(json, "publicHost", c.publicHost);
         c.ansiColors = Json.GetBool(json, "ansiColors", c.ansiColors);
         c.publicUrl = Json.GetString(json, "publicUrl", c.publicUrl);
+        c.logRetentionDays = Json.GetInt(json, "logRetentionDays", c.logRetentionDays);
+        if (c.logRetentionDays < 92) c.logRetentionDays = 92;
         if (c.port != 0 && (c.port < 1024 || c.port > 65535))
         {
             c.port = 0;
