@@ -123,6 +123,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     <div class="srv-sub">Panel d'administration Nova-Life</div>
   </div>
   <div class="right">
+    <span id="role-badge" class="badge admin"></span>
     <span id="clock" class="muted mono"></span>
     <button onclick="logout()">Déconnexion</button>
   </div>
@@ -183,7 +184,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section data-tab="comptes">
+  <section data-tab="comptes" class="need-admin">
     <h2>Bans (par SteamID)</h2>
     <div class="row" style="margin-bottom:10px">
       <input id="ban-steamid" placeholder="SteamID64 (7656119…)" style="width:210px" class="mono">
@@ -202,7 +203,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     <p id="ban-info" class="muted"></p>
   </section>
 
-  <section data-tab="joueurs">
+  <section data-tab="joueurs" class="need-admin">
     <h2>Donner un objet / un véhicule</h2>
     <div class="row" style="margin-bottom:10px">
       <span class="muted gl">Joueur</span>
@@ -300,6 +301,23 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </table>
     </div>
   </section>
+  <section data-tab="admins" class="need-owner">
+    <h2>Comptes du panel <span class="muted" style="font-weight:400;font-size:12px">— accès web admin/modo, gérés par le propriétaire</span></h2>
+    <div class="row" style="margin-bottom:12px">
+      <input id="pu-name" placeholder="Nom (ex. Kevin)" style="width:150px">
+      <input id="pu-pass" placeholder="Mot de passe (8+ caractères)" style="width:200px">
+      <select id="pu-level"><option value="1">Modo</option><option value="2" selected>Admin</option></select>
+      <button class="primary" onclick="puSet()">Créer / modifier</button>
+    </div>
+    <div class="tblwrap">
+    <table>
+      <thead><tr><th>Nom</th><th>Rôle</th><th>Actions</th></tr></thead>
+      <tbody id="panelusers"><tr><td colspan="3" class="muted">Chargement…</td></tr></tbody>
+    </table>
+    </div>
+    <p class="muted" style="margin-top:8px;font-size:12px">Modo : consultation + kick, messages, notifications, chat, journal. Admin : tout sauf cette gestion des comptes. Le mot de passe propriétaire reste celui de config.json.</p>
+  </section>
+
   <section data-tab="chat">
     <h2>Chat en direct <span class="muted" style="font-weight:400;font-size:12px">— historique conservé par jour sur le serveur</span></h2>
     <div id="chat-box"><p class="muted">Chargement…</p></div>
@@ -310,8 +328,8 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section data-tab="admins">
-    <h2>Gestion des administrateurs</h2>
+  <section data-tab="admins" class="need-owner">
+    <h2>Gestion des administrateurs <span class="muted" style="font-weight:400;font-size:12px">(en jeu)</span></h2>
     <div class="row" style="margin-bottom:12px">
       <input id="adm-steamid" placeholder="SteamID64 (7656119…)" class="mono" style="width:210px">
       <select id="adm-level">
@@ -376,12 +394,16 @@ function login(){
   fetch('api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})})
     .then(function(r){ return r.json(); })
     .then(function(r){
-      if(r.ok){ auth = pw; localStorage.setItem('tkweb_auth', pw); hideLogin(); refresh(); loadCatalogs(); chatPoll(); }
+      if(r.ok){
+        auth = pw; localStorage.setItem('tkweb_auth', pw);
+        localStorage.setItem('tkweb_level', r.level); localStorage.setItem('tkweb_name', r.name);
+        applyRole(); hideLogin(); refresh(); loadCatalogs(); chatPoll(); actPoll();
+      }
       else { document.getElementById('loginerr').textContent = r.error || 'Erreur'; }
     });
 }
 
-function logout(){ localStorage.removeItem('tkweb_auth'); auth=''; showLogin(); }
+function logout(){ localStorage.removeItem('tkweb_auth'); localStorage.removeItem('tkweb_level'); localStorage.removeItem('tkweb_name'); auth=''; showLogin(); }
 
 function esc(s){ var d = document.createElement('span'); d.textContent = s == null ? '' : s; return d.innerHTML; }
 
@@ -721,6 +743,23 @@ function chooseItem(id){
 
 
 // --- Onglets ---
+
+// --- Roles panel : 1 modo, 2 admin, 3 owner ---
+function myLevel(){ return parseInt(localStorage.getItem('tkweb_level') || '3'); }
+function applyRole(){
+  var lvl = myLevel();
+  var name = localStorage.getItem('tkweb_name') || '';
+  var badge = document.getElementById('role-badge');
+  if(badge){
+    var label = lvl >= 3 ? 'proprio' : (lvl === 2 ? 'admin' : 'modo');
+    badge.textContent = (name ? name + ' · ' : '') + label;
+  }
+  // owner uniquement : bloc comptes panel + gestion admins jeu
+  document.querySelectorAll('.need-owner').forEach(function(el){ el.style.display = lvl >= 3 ? '' : 'none'; });
+  // admin+ : elements marques
+  document.querySelectorAll('.need-admin').forEach(function(el){ el.style.display = lvl >= 2 ? '' : 'none'; });
+}
+
 function showTab(name){
   document.querySelectorAll('[data-tab]').forEach(function(el){
     el.style.display = el.getAttribute('data-tab') === name ? '' : 'none';
@@ -729,7 +768,7 @@ function showTab(name){
     b.className = b.getAttribute('data-nav') === name ? 'active' : '';
   });
   localStorage.setItem('tkweb_tab', name);
-  if(name === 'admins') loadAdmins(true);
+  if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3) loadPanelUsers(); }
   if(name === 'chat') chatScrollBottom();
 }
 
@@ -1142,9 +1181,10 @@ function playerCard(characterId, username){
       kv('Farm', '◆' + c.statDiamond + ' ⛏' + c.statCopper + ' ⛰' + c.statRock + ' 🌳' + c.statTree) +
       kv('Propriétés', c.areaCount + ' terrain(s)') +
       '</div>';
-    if(c.areaCount > 0){
-      h += '<p style="margin-top:10px"><button onclick="playerAreas(' + characterId + ',\'' + esc(username) + '\')">Voir les terrains</button></p>';
-    }
+    h += '<p style="margin-top:10px">' +
+      (c.areaCount > 0 ? '<button onclick="playerAreas(' + characterId + ',\'' + esc(username) + '\')">Voir les terrains</button> ' : '') +
+      (myLevel() >= 2 ? '<button onclick="showSms(' + characterId + ',\'' + esc(username) + '\')">📱 SMS</button> ' +
+      '<button onclick="showContacts(' + characterId + ',\'' + esc(username) + '\')">👥 Contacts</button>' : '') + '</p>';
     if(c.warns && c.warns.length){
       h += '<h3 style="margin-top:14px">Avertissements (' + c.warns.length + ')</h3>' + c.warns.map(function(w){
         return '<p style="font-size:12px;margin-top:4px"><span class="badge" style="color:var(--warn)">niv ' + w.level + '</span> ' +
@@ -1193,6 +1233,69 @@ function renderBizs(){
   }).join('');
 }
 
+
+// --- Comptes panel (owner) ---
+function loadPanelUsers(){
+  api('panelusers').then(function(list){
+    if(list.error) return;
+    var tb = document.getElementById('panelusers');
+    if(!list.length){ tb.innerHTML = '<tr><td colspan="3" class="muted">Aucun compte — seul le propriétaire (config.json) peut se connecter</td></tr>'; return; }
+    tb.innerHTML = list.map(function(u){
+      return '<tr><td><b>' + esc(u.name) + '</b></td>' +
+        '<td><span class="badge' + (u.level === 2 ? ' admin' : '') + '">' + (u.level === 2 ? 'admin' : 'modo') + '</span></td>' +
+        '<td class="actions">' +
+          '<button onclick="puEdit(\'' + esc(u.name) + '\',' + u.level + ')">Modifier</button>' +
+          '<button class="danger" onclick="if(confirm(\'Supprimer ce compte panel ?\'))puDel(\'' + esc(u.name) + '\')">Supprimer</button>' +
+        '</td></tr>';
+    }).join('');
+  }).catch(function(){});
+}
+function puSet(){
+  var name = document.getElementById('pu-name').value.trim();
+  var pass = document.getElementById('pu-pass').value;
+  var lvl = parseInt(document.getElementById('pu-level').value);
+  if(!name) return toast('Nom manquant', true);
+  api('paneluserset', {name: name, password: pass, level: lvl}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Compte enregistr\u00e9'); document.getElementById('pu-pass').value=''; loadPanelUsers(); }
+  });
+}
+function puEdit(name, level){
+  document.getElementById('pu-name').value = name;
+  document.getElementById('pu-level').value = level;
+  document.getElementById('pu-pass').value = '';
+  toast('Modifie le r\u00f4le ou tape un nouveau mot de passe puis « Créer / modifier »');
+}
+function puDel(name){
+  api('paneluserdel', {name: name}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Compte supprim\u00e9'); loadPanelUsers(); }
+  });
+}
+
+// --- SMS / contacts (admin+) ---
+function showSms(characterId, username){
+  api('sms?characterId=' + characterId).then(function(list){
+    if(list.error){ toast(list.error, true); return; }
+    var body = !list.length ? '<p class="muted">Aucun SMS.</p>' :
+      '<div class="tblwrap"><table><thead><tr><th>Date</th><th>De</th><th>À</th><th>Message</th></tr></thead><tbody>' +
+      list.map(function(m){
+        var d = m.timestamp > 0 ? new Date(m.timestamp * 1000).toLocaleString('fr-FR') : '';
+        return '<tr><td class="mono muted">' + d + '</td><td class="mono">' + esc(m.from) + '</td>' +
+          '<td class="mono">' + esc(m.to) + '</td><td>' + esc(m.text) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    openModal('<h3>📱 SMS de ' + esc(username) + '</h3>' + body, true);
+  });
+}
+function showContacts(characterId, username){
+  api('contacts?characterId=' + characterId).then(function(list){
+    if(list.error){ toast(list.error, true); return; }
+    var body = !list.length ? '<p class="muted">Aucun contact.</p>' :
+      '<div class="invgrid">' + list.map(function(c){
+        return '<div class="invcell"><span>' + esc(c.name) + '</span><b class="mono">' + esc(c.number) + '</b></div>';
+      }).join('') + '</div>';
+    openModal('<h3>👥 Contacts de ' + esc(username) + '</h3>' + body, true);
+  });
+}
+
 function histBan(steamId){
   var reason = prompt('Raison du ban :', '');
   if(reason === null) return;
@@ -1213,6 +1316,7 @@ setInterval(function(){
 }, 1000);
 
 showTab(localStorage.getItem('tkweb_tab') || 'dashboard');
+applyRole();
 if(auth){ hideLogin(); refresh(); loadCatalogs(); chatPoll(); actPoll(); } else { showLogin(); }
 setInterval(function(){ if(auth && document.getElementById('login').style.display === 'none'){ refresh(); chatPoll(); actPoll(); } }, 5000);
 </script>

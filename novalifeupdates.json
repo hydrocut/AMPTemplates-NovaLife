@@ -223,6 +223,14 @@
     "SkipOnFailure": false
   },
   {
+    "UpdateStageName": "Création du dossier des icônes d'objets",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "CreateDirectory",
+    "UpdateSourceArgs": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKWebPanel/icons",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": true
+  },
+  {
     "UpdateStageName": "Icônes d'objets du panel (extraction)",
     "UpdateSourcePlatform": "All",
     "UpdateSource": "FetchURL",
@@ -232,6 +240,14 @@
     "UnzipUpdateSource": true,
     "DeleteAfterExtract": true,
     "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
+  },
+  {
+    "UpdateStageName": "Création du dossier des vignettes véhicules",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "CreateDirectory",
+    "UpdateSourceArgs": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKWebPanel/vehicons",
+    "OverwriteExistingFiles": false,
     "SkipOnFailure": true
   },
   {

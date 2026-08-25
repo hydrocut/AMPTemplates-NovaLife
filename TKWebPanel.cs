@@ -287,7 +287,9 @@ public class TKWebPanel : Plugin
             httpThread.Start();
             InitChat();
             InitActivity();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.2 initialisé — panel sur le port " + port);
+            usersPath = Path.Combine(pluginDir, "users.json");
+            LoadPanelUsers();
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.3 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -338,6 +340,16 @@ public class TKWebPanel : Plugin
     {
         Thread t = new Thread(delegate ()
         {
+            if (!string.IsNullOrEmpty(config.publicUrl))
+            {
+                string g0 = config.ansiColors ? "[92m" : "";
+                string z0 = config.ansiColors ? "[0m" : "";
+                Debug.Log(g0 + "[TKWEB] ============================================================" + z0);
+                Debug.Log(g0 + "[TKWEB]   Panel admin web : " + config.publicUrl + z0);
+                Debug.Log(g0 + "[TKWEB]   Mot de passe    : Plugins/TKWebPanel/config.json" + z0);
+                Debug.Log(g0 + "[TKWEB] ============================================================" + z0);
+                return;
+            }
             string host = config.publicHost;
             if (string.IsNullOrEmpty(host))
             {
@@ -521,10 +533,151 @@ public class TKWebPanel : Plugin
         }
     }
 
-    private bool CheckAuth(HttpListenerContext ctx)
+    // ------------------------------------------------------------------
+    // Comptes panel à rôles (v2.3) : owner(3) > admin(2) > modo(1)
+    // Le mot de passe de config.json = compte "owner" implicite.
+    // Comptes supplémentaires dans Plugins/TKWebPanel/users.json
+    // ------------------------------------------------------------------
+    private class PanelUser
     {
-        string provided = ctx.Request.Headers["X-Auth"];
-        return !string.IsNullOrEmpty(provided) && SlowEquals(provided, config.password);
+        public string name;
+        public string password;
+        public int level; // 1 modo, 2 admin, 3 owner
+    }
+
+    private static readonly object usersLock = new object();
+    private static List<PanelUser> panelUsers = new List<PanelUser>();
+    private static string usersPath;
+
+    private static void LoadPanelUsers()
+    {
+        lock (usersLock)
+        {
+            panelUsers.Clear();
+            try
+            {
+                if (usersPath != null && File.Exists(usersPath))
+                {
+                    foreach (Match m in Regex.Matches(File.ReadAllText(usersPath),
+                        "\\{\\s*\"name\"\\s*:\\s*\"(?<n>(?:\\\\.|[^\"])*)\"\\s*,\\s*\"password\"\\s*:\\s*\"(?<p>(?:\\\\.|[^\"])*)\"\\s*,\\s*\"level\"\\s*:\\s*(?<l>\\d)"))
+                    {
+                        panelUsers.Add(new PanelUser
+                        {
+                            name = m.Groups["n"].Value,
+                            password = m.Groups["p"].Value,
+                            level = int.Parse(m.Groups["l"].Value)
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[TKWEB] Erreur lecture users.json : " + ex.Message);
+            }
+        }
+    }
+
+    private static void SavePanelUsers()
+    {
+        lock (usersLock)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder("[\n");
+                for (int i = 0; i < panelUsers.Count; i++)
+                {
+                    sb.Append("  {\"name\": ").Append(Json.Str(panelUsers[i].name))
+                      .Append(", \"password\": ").Append(Json.Str(panelUsers[i].password))
+                      .Append(", \"level\": ").Append(panelUsers[i].level).Append("}");
+                    if (i < panelUsers.Count - 1) sb.Append(",");
+                    sb.Append("\n");
+                }
+                sb.Append("]\n");
+                File.WriteAllText(usersPath, sb.ToString());
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[TKWEB] Erreur écriture users.json : " + ex.Message);
+            }
+        }
+    }
+
+    // Renvoie le niveau du compte correspondant au mot de passe (0 = refus)
+    private int AuthLevel(string provided, out string userName)
+    {
+        userName = "";
+        if (string.IsNullOrEmpty(provided))
+        {
+            return 0;
+        }
+        if (SlowEquals(provided, config.password))
+        {
+            userName = "owner";
+            return 3;
+        }
+        lock (usersLock)
+        {
+            foreach (PanelUser u in panelUsers)
+            {
+                if (SlowEquals(provided, u.password))
+                {
+                    userName = u.name;
+                    return u.level;
+                }
+            }
+        }
+        return 0;
+    }
+
+    private int CheckAuthLevel(HttpListenerContext ctx, out string userName)
+    {
+        return AuthLevel(ctx.Request.Headers["X-Auth"], out userName);
+    }
+
+    // Niveau minimal requis par endpoint (1 modo, 2 admin, 3 owner)
+    private static int MinLevel(string path)
+    {
+        switch (path)
+        {
+            // owner uniquement
+            case "/api/setadmin":
+            case "/api/panelusers":
+            case "/api/paneluserset":
+            case "/api/paneluserdel":
+                return 3;
+            // modo autorisé (consultation + modération légère)
+            case "/api/status":
+            case "/api/players":
+            case "/api/kick":
+            case "/api/message":
+            case "/api/notify":
+            case "/api/chat":
+            case "/api/chatsend":
+            case "/api/chathistory":
+            case "/api/activity":
+            case "/api/activityhistory":
+            case "/api/accheck":
+            case "/api/history":
+            case "/api/playercard":
+            case "/api/checkban":
+            case "/api/inventory":
+            case "/api/offlineinv":
+            case "/api/vehicles":
+            case "/api/offlinevehicles":
+            case "/api/items":
+            case "/api/vehiclemodels":
+            case "/api/areas":
+            case "/api/bizs":
+            case "/api/fps":       // GET seulement, le POST est filtré plus bas
+            case "/api/ghoststats":
+            case "/api/heavyareas":
+            case "/api/floodbans":
+            case "/api/admins":
+                return 1;
+            // tout le reste : admin
+            default:
+                return 2;
+        }
     }
 
     private static bool SlowEquals(string a, string b)
@@ -546,19 +699,33 @@ public class TKWebPanel : Plugin
         if (path == "/api/login")
         {
             string pass = Json.GetString(body, "password", "");
-            if (SlowEquals(pass, config.password))
+            string loginName;
+            int loginLevel = AuthLevel(pass, out loginName);
+            if (loginLevel > 0)
             {
-                return "{\"ok\":true}";
+                return "{\"ok\":true,\"name\":" + Json.Str(loginName) + ",\"level\":" + loginLevel + "}";
             }
             Thread.Sleep(800); // freine le brute-force
             status = 401;
             return "{\"error\":\"mot de passe incorrect\"}";
         }
 
-        if (!CheckAuth(ctx))
+        string authUser;
+        int level = CheckAuthLevel(ctx, out authUser);
+        if (level == 0)
         {
             status = 401;
             return "{\"error\":\"non authentifié\"}";
+        }
+        int need = MinLevel(path);
+        if (path == "/api/fps" && ctx.Request.HttpMethod != "GET")
+        {
+            need = 2; // modifier les FPS = admin
+        }
+        if (level < need)
+        {
+            status = 403;
+            return "{\"error\":\"permission insuffisante (réservé " + (need >= 3 ? "au propriétaire" : "aux admins") + ")\"}";
         }
 
         switch (path)
@@ -631,6 +798,18 @@ public class TKWebPanel : Plugin
                 return ApiLocalMsg(body);
             case "/api/permis":
                 return ApiPermis(body);
+            case "/api/sms":
+                return ApiSms(ctx.Request.QueryString["characterId"]);
+            case "/api/contacts":
+                return ApiContacts(ctx.Request.QueryString["characterId"]);
+            case "/api/mails":
+                return ApiMails();
+            case "/api/panelusers":
+                return ApiPanelUsers();
+            case "/api/paneluserset":
+                return ApiPanelUserSet(body);
+            case "/api/paneluserdel":
+                return ApiPanelUserDel(body);
             case "/api/ghoststats":
                 return (string)RunOnMain(ApiGhostStats);
             case "/api/floodbans":
@@ -2652,6 +2831,198 @@ public class TKWebPanel : Plugin
         });
     }
 
+    // ------------------------------------------------------------------
+    // SMS / Contacts / Mails (v2.3, admin+)
+    // ------------------------------------------------------------------
+    private class SmsRow
+    {
+        public string NumberEmitter { get; set; }
+        public string NumberReceiver { get; set; }
+        public long Timestamp { get; set; }
+        public string Message { get; set; }
+    }
+
+    private class ContactRow
+    {
+        public string Name { get; set; }
+        public string Number { get; set; }
+    }
+
+    private class MailRow
+    {
+        public string Recipient { get; set; }
+        public string Sender { get; set; }
+        public string Subject { get; set; }
+        public string Content { get; set; }
+        public long Timestamp { get; set; }
+    }
+
+    private string ApiSms(string characterIdStr)
+    {
+        int characterId;
+        if (!int.TryParse(characterIdStr ?? "", out characterId) || characterId <= 0)
+        {
+            return "{\"error\":\"characterId invalide\"}";
+        }
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            foreach (SmsRow r in conn.Query<SmsRow>(
+                "SELECT NumberEmitter, NumberReceiver, Timestamp, Message FROM SMS WHERE CharacterId = ? ORDER BY Id DESC LIMIT 200", characterId))
+            {
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"from\":").Append(Json.Str(r.NumberEmitter ?? ""));
+                sb.Append(",\"to\":").Append(Json.Str(r.NumberReceiver ?? ""));
+                sb.Append(",\"timestamp\":").Append(r.Timestamp);
+                sb.Append(",\"text\":").Append(Json.Str(r.Message ?? ""));
+                sb.Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    private string ApiContacts(string characterIdStr)
+    {
+        int characterId;
+        if (!int.TryParse(characterIdStr ?? "", out characterId) || characterId <= 0)
+        {
+            return "{\"error\":\"characterId invalide\"}";
+        }
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            foreach (ContactRow r in conn.Query<ContactRow>(
+                "SELECT Name, Number FROM Contacts WHERE CharacterId = ? ORDER BY Name LIMIT 200", characterId))
+            {
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"name\":").Append(Json.Str(r.Name ?? ""));
+                sb.Append(",\"number\":").Append(Json.Str(r.Number ?? "")).Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    private string ApiMails()
+    {
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            foreach (MailRow r in conn.Query<MailRow>(
+                "SELECT Recipient, Sender, Subject, Content, Timestamp FROM Mails ORDER BY Id DESC LIMIT 100"))
+            {
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"from\":").Append(Json.Str(r.Sender ?? ""));
+                sb.Append(",\"to\":").Append(Json.Str(r.Recipient ?? ""));
+                sb.Append(",\"subject\":").Append(Json.Str(r.Subject ?? ""));
+                sb.Append(",\"content\":").Append(Json.Str(r.Content ?? ""));
+                sb.Append(",\"timestamp\":").Append(r.Timestamp).Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Comptes panel (v2.3, owner)
+    // ------------------------------------------------------------------
+    private string ApiPanelUsers()
+    {
+        StringBuilder sb = new StringBuilder("[");
+        lock (usersLock)
+        {
+            for (int i = 0; i < panelUsers.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append("{\"name\":").Append(Json.Str(panelUsers[i].name));
+                sb.Append(",\"level\":").Append(panelUsers[i].level).Append("}");
+            }
+        }
+        sb.Append("]");
+        return sb.ToString();
+    }
+
+    private string ApiPanelUserSet(string body)
+    {
+        string name = Json.GetString(body, "name", "").Trim();
+        string password = Json.GetString(body, "password", "");
+        int level = Json.GetInt(body, "level", 0);
+        if (name.Length == 0 || name.Length > 30 || level < 1 || level > 2)
+        {
+            return "{\"error\":\"nom ou niveau invalide (1=modo, 2=admin)\"}";
+        }
+        if (string.Equals(name, "owner", StringComparison.OrdinalIgnoreCase))
+        {
+            return "{\"error\":\"'owner' est réservé (mot de passe dans config.json)\"}";
+        }
+        lock (usersLock)
+        {
+            PanelUser existing = panelUsers.Find(delegate (PanelUser u) { return string.Equals(u.name, name, StringComparison.OrdinalIgnoreCase); });
+            if (existing == null)
+            {
+                if (string.IsNullOrEmpty(password) || password.Length < 8)
+                {
+                    return "{\"error\":\"mot de passe requis (8 caractères minimum)\"}";
+                }
+                panelUsers.Add(new PanelUser { name = name, password = password, level = level });
+            }
+            else
+            {
+                existing.level = level;
+                if (!string.IsNullOrEmpty(password))
+                {
+                    if (password.Length < 8)
+                    {
+                        return "{\"error\":\"mot de passe trop court (8 caractères minimum)\"}";
+                    }
+                    existing.password = password;
+                }
+            }
+        }
+        SavePanelUsers();
+        Debug.Log("[TKWEB] PANELUSER set nom=" + name + " niveau=" + level);
+        return "{\"ok\":true}";
+    }
+
+    private string ApiPanelUserDel(string body)
+    {
+        string name = Json.GetString(body, "name", "").Trim();
+        int removed;
+        lock (usersLock)
+        {
+            removed = panelUsers.RemoveAll(delegate (PanelUser u) { return string.Equals(u.name, name, StringComparison.OrdinalIgnoreCase); });
+        }
+        if (removed == 0)
+        {
+            return "{\"error\":\"compte introuvable\"}";
+        }
+        SavePanelUsers();
+        Debug.Log("[TKWEB] PANELUSER suppression nom=" + name);
+        return "{\"ok\":true}";
+    }
+
     private string ApiAntiCheat()
     {
         try
@@ -2929,6 +3300,8 @@ public class TKWebPanelConfig
     public string publicHost = "";
     // Bannière console en vert ANSI (désactiver si la console affiche des caractères bizarres)
     public bool ansiColors = true;
+    // URL publique complète affichée dans la bannière (ex. https://nova-life.teamkit.fr/vizu/)
+    public string publicUrl = "";
 
     public static string ToJson(TKWebPanelConfig c)
     {
@@ -2939,7 +3312,8 @@ public class TKWebPanelConfig
         sb.AppendLine("  \"password\": " + Json.Str(c.password) + ",");
         sb.AppendLine("  \"allocatedCores\": " + c.allocatedCores + ",");
         sb.AppendLine("  \"publicHost\": " + Json.Str(c.publicHost) + ",");
-        sb.AppendLine("  \"ansiColors\": " + (c.ansiColors ? "true" : "false"));
+        sb.AppendLine("  \"ansiColors\": " + (c.ansiColors ? "true" : "false") + ",");
+        sb.AppendLine("  \"publicUrl\": " + Json.Str(c.publicUrl));
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -2957,6 +3331,7 @@ public class TKWebPanelConfig
         c.allocatedCores = Json.GetInt(json, "allocatedCores", c.allocatedCores);
         c.publicHost = Json.GetString(json, "publicHost", c.publicHost);
         c.ansiColors = Json.GetBool(json, "ansiColors", c.ansiColors);
+        c.publicUrl = Json.GetString(json, "publicUrl", c.publicUrl);
         if (c.port != 0 && (c.port < 1024 || c.port > 65535))
         {
             c.port = 0;
