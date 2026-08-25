@@ -139,6 +139,34 @@
     "SkipOnFailure": false
   },
   {
+    "UpdateStageName": "Plugin TKDynamicFps (framerate adaptatif)",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKDynamicFps.dll",
+    "UpdateSourceArgs": "TKDynamicFps.dll",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/",
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
+  },
+  {
+    "UpdateStageName": "Création du dossier TKDynamicFps",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "CreateDirectory",
+    "UpdateSourceArgs": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKDynamicFps",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Config par défaut - plugin TKDynamicFps",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKDynamicFps-config.json",
+    "UpdateSourceArgs": "config.json",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKDynamicFps/",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
     "UpdateStageName": "Création du dossier TeamKitIntro",
     "UpdateSourcePlatform": "All",
     "UpdateSource": "CreateDirectory",

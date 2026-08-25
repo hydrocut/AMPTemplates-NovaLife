@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "idleFps": 20,
+  "minPlayersFps": 30,
+  "maxFps": 60,
+  "cpuHighPercent": 80,
+  "cpuLowPercent": 55,
+  "allocatedCores": 3,
+  "intervalSeconds": 10,
+  "stepFps": 5,
+  "logChanges": true
+}
