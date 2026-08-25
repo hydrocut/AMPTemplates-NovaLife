@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "moneyAlertThreshold": 500000,
+  "maxSpeed": 30.0,
+  "teleportDistance": 120.0,
+  "teleportGraceSeconds": 6.0,
+  "checkIntervalSeconds": 1,
+  "maxAlerts": 200,
+  "reasonWhitelist": ["admin", "salaire", "vente", "banque", "retrait", "depot", "virement", "loyer", "impot", "panel", "caf", "allocation", "facture", "achat", "remboursement"]
+}

@@ -195,6 +195,46 @@
     "SkipOnFailure": false
   },
   {
+    "UpdateStageName": "Plugin TKAntiCheat (anti-triche)",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKAntiCheat.dll",
+    "UpdateSourceArgs": "TKAntiCheat.dll",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/",
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
+  },
+  {
+    "UpdateStageName": "Création du dossier TKAntiCheat",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "CreateDirectory",
+    "UpdateSourceArgs": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKAntiCheat",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Config par défaut - plugin TKAntiCheat",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKAntiCheat-config.json",
+    "UpdateSourceArgs": "config.json",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKAntiCheat/",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Icônes d'objets du panel (extraction)",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKWebPanel-icons.zip",
+    "UpdateSourceArgs": "TKWebPanel-icons.zip",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKWebPanel/icons/",
+    "UnzipUpdateSource": true,
+    "DeleteAfterExtract": true,
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
+  },
+  {
     "UpdateStageName": "Création du dossier TeamKitIntro",
     "UpdateSourcePlatform": "All",
     "UpdateSource": "CreateDirectory",

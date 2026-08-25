@@ -47,6 +47,12 @@ input:focus{outline:none;border-color:var(--accent)}
 #login button{width:100%;padding:9px}
 .muted{color:var(--muted)}
 .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.ico{width:34px;height:34px;object-fit:contain;vertical-align:middle;image-rendering:auto}
+.invgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-top:8px}
+.invcell{display:flex;align-items:center;gap:8px;background:#0f1420;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px}
+.invcell span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.itempick{display:inline-block;position:relative}
+#item-preview{width:28px;height:28px;object-fit:contain;vertical-align:middle;margin-left:4px}
 </style>
 </head>
 <body>
@@ -135,7 +141,8 @@ input:focus{outline:none;border-color:var(--accent)}
     <div class="row" style="margin-bottom:10px">
       <select id="give-player" style="min-width:180px"></select>
       <span style="color:var(--muted)">|</span>
-      <input id="item-search" list="item-list" placeholder="Objet (nom ou id)" style="width:220px">
+      <input id="item-search" list="item-list" placeholder="Objet (nom ou id)" style="width:220px" oninput="updateItemPreview()">
+      <img id="item-preview" style="display:none">
       <datalist id="item-list"></datalist>
       <input id="item-qty" type="number" value="1" min="1" style="width:70px">
       <button class="primary" onclick="giveItem(true)">Donner</button>
@@ -149,6 +156,16 @@ input:focus{outline:none;border-color:var(--accent)}
       <button onclick="showVehicles()">Voir garage du joueur</button>
     </div>
     <div id="give-info" class="muted" style="margin-top:10px"></div>
+  </section>
+
+  <section>
+    <h2>Anti-cheat — détections (TKAntiCheat)</h2>
+    <div class="tblwrap">
+    <table>
+      <thead><tr><th>Heure</th><th>Type</th><th>Joueur</th><th>SteamID</th><th>Détail</th><th></th></tr></thead>
+      <tbody id="accheck"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody>
+    </table>
+    </div>
   </section>
 
   <section>
@@ -270,6 +287,23 @@ function refresh(){
     var mode = f.forced > 0 ? ('<b style="color:var(--warn)">FORCÉ à ' + f.forced + '</b>') : '<b style="color:var(--ok)">AUTO</b>';
     box.innerHTML = 'Mode : ' + mode + ' &nbsp;·&nbsp; Réel : <b>' + f.actual + '</b> FPS &nbsp;·&nbsp; Cible : <b>' + f.target +
       '</b> &nbsp;·&nbsp; <span class="muted">plage auto ' + f.idleFps + '–' + f.maxFps + ' (base ' + f.minPlayersFps + ')</span>';
+  }).catch(function(){});
+
+  api('accheck').then(function(list){
+    var tb = document.getElementById('accheck');
+    if(!list.length){ tb.innerHTML = '<tr><td colspan="6" class="muted">Aucune détection</td></tr>'; return; }
+    var color = {ARGENT:'var(--warn)', TELEPORT:'var(--bad)', VITESSE:'var(--bad)'};
+    tb.innerHTML = list.slice(0,60).map(function(a){
+      return '<tr>' +
+        '<td class="mono muted">' + esc(a.time) + '</td>' +
+        '<td><span class="badge" style="color:' + (color[a.kind]||'var(--muted)') + '">' + esc(a.kind) + '</span></td>' +
+        '<td>' + esc(a.pseudo) + '</td>' +
+        '<td class="mono">' + esc(a.steamId) + '</td>' +
+        '<td>' + esc(a.detail) + '</td>' +
+        '<td class="actions">' +
+          '<button onclick="document.getElementById(\'ban-steamid\').value=\'' + esc(a.steamId) + '\';window.scrollTo(0,0)">→ Ban</button>' +
+        '</td></tr>';
+    }).join('');
   }).catch(function(){});
 
   api('floodbans').then(function(list){
@@ -416,6 +450,17 @@ function giveItem(give){
   act(give ? 'giveitem' : 'removeitem', {steamId: steamId, itemId: itemId, amount: qty}, give ? 'Objet donné' : 'Objet retiré');
 }
 
+function icon(id){ return '<img src="/icon/' + id + '.png" class="ico" onerror="this.style.display=\'none\'">'; }
+
+function updateItemPreview(){
+  var id = resolveId(document.getElementById('item-search').value, window._items, 'name', 'id');
+  var img = document.getElementById('item-preview');
+  if(id === null){ img.style.display = 'none'; return; }
+  img.src = '/icon/' + id + '.png';
+  img.style.display = 'inline-block';
+  img.onerror = function(){ img.style.display = 'none'; };
+}
+
 function showInventory(){
   var steamId = document.getElementById('give-player').value;
   if(!steamId) return toast('Sélectionne un joueur', true);
@@ -423,7 +468,9 @@ function showInventory(){
     var el = document.getElementById('give-info');
     if(list.error){ el.textContent = list.error; return; }
     if(!list.length){ el.textContent = 'Inventaire vide.'; return; }
-    el.innerHTML = '<b>Inventaire :</b> ' + list.map(function(i){ return esc(i.name) + ' ×' + i.number; }).join(' · ');
+    el.innerHTML = '<b>Inventaire :</b><div class="invgrid">' + list.map(function(i){
+      return '<div class="invcell">' + icon(i.itemId) + '<span>' + esc(i.name) + '</span><b>×' + i.number + '</b></div>';
+    }).join('') + '</div>';
   });
 }
 

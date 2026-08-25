@@ -18,7 +18,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKWebPanel v1.1 — TeamKit.fr
+/// TKWebPanel v1.2 — TeamKit.fr
 ///
 /// Panel d'administration web embarqué dans le serveur Nova-Life.
 /// Le plugin démarre un serveur HTTP (port configurable, défaut 7791) qui
@@ -56,7 +56,7 @@ public class TKWebPanel : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.1 désactivé par config");
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.2 désactivé par config");
             return;
         }
         try
@@ -74,7 +74,7 @@ public class TKWebPanel : Plugin
             httpThread.IsBackground = true;
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.2 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -221,6 +221,11 @@ public class TKWebPanel : Plugin
                 responseText = Encoding.UTF8.GetString(Convert.FromBase64String(TKWebPanelPage.Base64));
                 contentType = "text/html; charset=utf-8";
             }
+            else if (path.StartsWith("/icon/"))
+            {
+                ServeIcon(ctx, path);
+                return;
+            }
             else if (path.StartsWith("/api/"))
             {
                 string body = "";
@@ -260,6 +265,41 @@ public class TKWebPanel : Plugin
         }
         catch
         {
+        }
+    }
+
+    // Sert une icône d'item PNG depuis Plugins/TKWebPanel/icons/{id}.png
+    // (icônes extraites du jeu). Cache navigateur 7 jours. Pas d'auth : ce ne
+    // sont que des images d'items, et ça permet le cache/preload simple.
+    private void ServeIcon(HttpListenerContext ctx, string path)
+    {
+        try
+        {
+            string name = Path.GetFileName(path); // "123.png"
+            if (!Regex.IsMatch(name, @"^\d+\.png$"))
+            {
+                ctx.Response.StatusCode = 404;
+                ctx.Response.OutputStream.Close();
+                return;
+            }
+            string file = Path.Combine(Path.Combine(pluginDir, "icons"), name);
+            if (!File.Exists(file))
+            {
+                ctx.Response.StatusCode = 404;
+                ctx.Response.OutputStream.Close();
+                return;
+            }
+            byte[] data = File.ReadAllBytes(file);
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = "image/png";
+            ctx.Response.Headers["Cache-Control"] = "public, max-age=604800";
+            ctx.Response.ContentLength64 = data.Length;
+            ctx.Response.OutputStream.Write(data, 0, data.Length);
+            ctx.Response.OutputStream.Close();
+        }
+        catch
+        {
+            try { ctx.Response.StatusCode = 500; ctx.Response.OutputStream.Close(); } catch { }
         }
     }
 
@@ -329,6 +369,8 @@ public class TKWebPanel : Plugin
                 return ApiTeleport(body);
             case "/api/bring":
                 return ApiBring(body);
+            case "/api/accheck":
+                return ApiAntiCheat();
             case "/api/floodbans":
                 return ApiFloodBans();
             case "/api/floodunban":
@@ -1241,6 +1283,24 @@ public class TKWebPanel : Plugin
             Debug.Log("[TKWEB] DELETEVEHICLE vehicleId=" + vehicleId);
             return removed ? "{\"ok\":true}" : "{\"error\":\"échec suppression en base\"}";
         });
+    }
+
+    // Lit les alertes anti-cheat écrites par le plugin TKAntiCheat (fichier partagé)
+    private string ApiAntiCheat()
+    {
+        try
+        {
+            string file = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiCheat"), "alerts.json");
+            if (File.Exists(file))
+            {
+                string content = File.ReadAllText(file).Trim();
+                return string.IsNullOrEmpty(content) ? "[]" : content;
+            }
+        }
+        catch
+        {
+        }
+        return "[]";
     }
 
     private string FloodBansPath()
