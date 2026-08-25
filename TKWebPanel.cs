@@ -18,7 +18,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKWebPanel v1.0 — TeamKit.fr
+/// TKWebPanel v1.1 — TeamKit.fr
 ///
 /// Panel d'administration web embarqué dans le serveur Nova-Life.
 /// Le plugin démarre un serveur HTTP (port configurable, défaut 7791) qui
@@ -56,7 +56,7 @@ public class TKWebPanel : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.0 désactivé par config");
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.1 désactivé par config");
             return;
         }
         try
@@ -892,6 +892,23 @@ public class TKWebPanel : Plugin
     // ------------------------------------------------------------------
     // Items
     // ------------------------------------------------------------------
+    // itemName est souvent une clé de localisation non résolue côté serveur
+    // headless (ex "1/Name") : on retombe alors sur le slug, plus lisible.
+    private static string ReadableItemName(Item it)
+    {
+        if (it == null)
+        {
+            return "?";
+        }
+        string name = it.itemName;
+        bool looksLikeKey = string.IsNullOrEmpty(name) || name.Contains("/") || name.EndsWith("/Name");
+        if (looksLikeKey && !string.IsNullOrEmpty(it.slug))
+        {
+            return it.slug;
+        }
+        return string.IsNullOrEmpty(name) ? ("item " + it.id) : name;
+    }
+
     private string cachedItemsJson;
 
     private object ApiItems()
@@ -919,7 +936,7 @@ public class TKWebPanel : Plugin
                 }
                 first = false;
                 sb.Append("{\"id\":").Append(it.id);
-                sb.Append(",\"name\":").Append(Json.Str(it.itemName ?? it.slug ?? ("item " + it.id)));
+                sb.Append(",\"name\":").Append(Json.Str(ReadableItemName(it)));
                 sb.Append("}");
             }
         }
@@ -984,7 +1001,7 @@ public class TKWebPanel : Plugin
                     Item it = Nova.man.item.GetItem(slot.itemId);
                     if (it != null)
                     {
-                        name = it.itemName ?? it.slug ?? name;
+                        name = ReadableItemName(it);
                     }
                 }
                 catch
