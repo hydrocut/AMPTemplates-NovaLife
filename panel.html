@@ -9,6 +9,8 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;min-height:100vh}
 header{display:flex;align-items:center;gap:18px;padding:12px 22px;background:linear-gradient(135deg,#10141f 0%,#131b2e 60%,#0f1f28 100%);border-bottom:1px solid var(--border)}
+#home-link{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--border);border-radius:8px;color:var(--muted);text-decoration:none;font-size:17px;flex:none}
+#home-link:hover{border-color:var(--accent);color:var(--accent)}
 .brand{font-size:16px;font-weight:700;line-height:1.1}
 .brand span{color:var(--accent)}
 .brand-sub{font-size:10px;color:var(--muted);font-weight:400;letter-spacing:.4px}
@@ -117,6 +119,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
 </div>
 
 <header>
+  <a id="home-link" href="/" title="Retour à la liste des instances" style="display:none">⌂</a>
   <div class="brand">TK<span>WebPanel</span><div class="brand-sub">by TeamKit</div></div>
   <div class="srvbox">
     <div id="srvname">…</div>
@@ -1316,6 +1319,7 @@ setInterval(function(){
 }, 1000);
 
 showTab(localStorage.getItem('tkweb_tab') || 'dashboard');
+if(location.pathname !== '/'){ document.getElementById('home-link').style.display = 'flex'; }
 applyRole();
 if(auth){ hideLogin(); refresh(); loadCatalogs(); chatPoll(); actPoll(); } else { showLogin(); }
 setInterval(function(){ if(auth && document.getElementById('login').style.display === 'none'){ refresh(); chatPoll(); actPoll(); } }, 5000);
