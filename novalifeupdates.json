@@ -167,6 +167,34 @@
     "SkipOnFailure": false
   },
   {
+    "UpdateStageName": "Plugin TKWebPanel (panel admin web)",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKWebPanel.dll",
+    "UpdateSourceArgs": "TKWebPanel.dll",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/",
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
+  },
+  {
+    "UpdateStageName": "Création du dossier TKWebPanel",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "CreateDirectory",
+    "UpdateSourceArgs": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKWebPanel",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Config par défaut - plugin TKWebPanel",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKWebPanel-config.json",
+    "UpdateSourceArgs": "config.json",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKWebPanel/",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
     "UpdateStageName": "Création du dossier TeamKitIntro",
     "UpdateSourcePlatform": "All",
     "UpdateSource": "CreateDirectory",
