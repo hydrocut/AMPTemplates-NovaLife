@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "port": 7791,
+  "port": 0,
   "password": "",
   "allocatedCores": 3
 }

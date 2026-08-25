@@ -63,14 +63,15 @@ public class TKWebPanel : Plugin
             dispatcher = go.AddComponent<TKWebPanelDispatcher>();
             dispatcher.allocatedCores = config.allocatedCores;
 
+            int port = ResolvePort();
             listener = new HttpListener();
-            listener.Prefixes.Add("http://*:" + config.port + "/");
+            listener.Prefixes.Add("http://*:" + port + "/");
             listener.Start();
             httpThread = new Thread(HttpLoop);
             httpThread.IsBackground = true;
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.0 initialisé — panel sur le port " + config.port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.0 initialisé — panel sur le port " + port);
         }
         catch (Exception ex)
         {
@@ -112,6 +113,29 @@ public class TKWebPanel : Plugin
                 config.password = GeneratePassword();
             }
         }
+    }
+
+    // port 0 (auto) = port du jeu + 4 (7787 -> 7791). Évite tout conflit
+    // quand plusieurs instances Nova-Life tournent sur la même machine.
+    private int ResolvePort()
+    {
+        if (config.port > 0)
+        {
+            return config.port;
+        }
+        int serverPort = 7787;
+        try
+        {
+            string cfg = Path.Combine(Path.GetDirectoryName(pluginDir), "../Config/server.json");
+            if (File.Exists(cfg))
+            {
+                serverPort = Json.GetInt(File.ReadAllText(cfg), "serverPort", serverPort);
+            }
+        }
+        catch
+        {
+        }
+        return serverPort + 4;
     }
 
     private static string GeneratePassword()
@@ -935,7 +959,8 @@ public static class Json
 public class TKWebPanelConfig
 {
     public bool enabled = true;
-    public int port = 7791;
+    // 0 = automatique (port du jeu + 4)
+    public int port = 0;
     // Mot de passe du panel (généré automatiquement si vide)
     public string password = "";
     // Cœurs alloués à l'instance (pour le % CPU du monitoring)
@@ -964,9 +989,9 @@ public class TKWebPanelConfig
         c.port = Json.GetInt(json, "port", c.port);
         c.password = Json.GetString(json, "password", c.password);
         c.allocatedCores = Json.GetInt(json, "allocatedCores", c.allocatedCores);
-        if (c.port < 1024 || c.port > 65535)
+        if (c.port != 0 && (c.port < 1024 || c.port > 65535))
         {
-            c.port = 7791;
+            c.port = 0;
         }
         return c;
     }
