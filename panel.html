@@ -8,10 +8,27 @@
 :root{--bg:#0d1117;--panel:#161b27;--border:#2a3245;--text:#dbe2f0;--muted:#8b95a8;--accent:#00f0ff;--ok:#3fd97b;--warn:#ffb454;--bad:#ff5d5d}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;min-height:100vh}
-header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
-header h1{font-size:17px;font-weight:600}
-header h1 span{color:var(--accent)}
-#srvname{color:var(--muted);font-size:13px}
+header{display:flex;align-items:center;gap:18px;padding:12px 22px;background:linear-gradient(135deg,#10141f 0%,#131b2e 60%,#0f1f28 100%);border-bottom:1px solid var(--border)}
+.brand{font-size:16px;font-weight:700;line-height:1.1}
+.brand span{color:var(--accent)}
+.brand-sub{font-size:10px;color:var(--muted);font-weight:400;letter-spacing:.4px}
+.srvbox{flex:1;text-align:center;min-width:0}
+#srvname{font-size:21px;font-weight:800;letter-spacing:.3px;background:linear-gradient(90deg,var(--accent),#7ee7ff 60%,#dbe2f0);-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srv-sub{font-size:11px;color:var(--muted);margin-top:1px}
+#tabs{display:flex;gap:4px;padding:8px 18px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5;overflow-x:auto}
+#tabs button{border:none;background:none;padding:8px 14px;border-radius:8px;font-size:13px;color:var(--muted);white-space:nowrap}
+#tabs button:hover{color:var(--text);background:#1b2232}
+#tabs button.active{color:var(--accent);background:#0e2a30;font-weight:600}
+footer{text-align:center;padding:18px 10px 26px;color:var(--muted);font-size:12px}
+footer a{color:var(--muted);text-decoration:none;border-bottom:1px dotted var(--border)}
+footer a:hover{color:var(--accent)}
+footer .don{color:#ff6b81;font-weight:600}
+footer .don:hover{color:#ff8fa0}
+#chat-box{height:420px;overflow-y:auto;background:#0b0f18;border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px}
+.chatmsg{margin-bottom:5px;line-height:1.45}
+.chatmsg .t{color:var(--muted);font-size:11px;font-family:ui-monospace,Consolas,monospace}
+.chatmsg .p{color:var(--accent);font-weight:600;cursor:pointer}
+.chatmsg .staff{color:var(--warn);font-weight:700}
 header .right{margin-left:auto;display:flex;gap:10px;align-items:center}
 main{max-width:1180px;margin:0 auto;padding:20px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
@@ -93,23 +110,36 @@ button.chip img{width:26px;height:26px;object-fit:contain}
 </div>
 
 <header>
-  <h1>TK<span>WebPanel</span></h1>
-  <span id="srvname"></span>
+  <div class="brand">TK<span>WebPanel</span><div class="brand-sub">by TeamKit</div></div>
+  <div class="srvbox">
+    <div id="srvname">…</div>
+    <div class="srv-sub">Panel d'administration Nova-Life</div>
+  </div>
   <div class="right">
     <span id="clock" class="muted mono"></span>
     <button onclick="logout()">Déconnexion</button>
   </div>
 </header>
 
+<nav id="tabs">
+  <button data-nav="dashboard" onclick="showTab('dashboard')">📊 Tableau de bord</button>
+  <button data-nav="joueurs" onclick="showTab('joueurs')">👥 Joueurs</button>
+  <button data-nav="comptes" onclick="showTab('comptes')">📇 Comptes</button>
+  <button data-nav="monde" onclick="showTab('monde')">🌍 Monde</button>
+  <button data-nav="chat" onclick="showTab('chat')">💬 Chat</button>
+  <button data-nav="securite" onclick="showTab('securite')">🛡️ Sécurité</button>
+  <button data-nav="admins" onclick="showTab('admins')">⭐ Admins</button>
+</nav>
+
 <main>
-  <div class="cards">
+  <div class="cards" data-tab="dashboard">
     <div class="card"><div class="v" id="c-players">–</div><div class="l">Joueurs en ligne</div></div>
     <div class="card"><div class="v" id="c-fps">–</div><div class="l">FPS serveur (réel / cible)</div></div>
     <div class="card"><div class="v" id="c-cpu">–</div><div class="l">CPU instance</div></div>
     <div class="card"><div class="v" id="c-uptime">–</div><div class="l">Uptime</div></div>
   </div>
 
-  <section>
+  <section data-tab="joueurs">
     <h2>Joueurs en ligne</h2>
     <div class="row" style="margin-bottom:10px">
       <input id="players-filter" placeholder="Filtrer (pseudo, perso, steamid)…" style="flex:1;min-width:200px" oninput="renderPlayers()">
@@ -122,7 +152,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section>
+  <section data-tab="dashboard">
     <h2>Annonce serveur</h2>
     <div class="row">
       <input id="announce" style="flex:1;min-width:240px" placeholder="Message visible par tous les joueurs" onkeydown="if(event.key==='Enter')sendAnnounce()">
@@ -130,7 +160,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section>
+  <section data-tab="dashboard">
     <h2>Framerate serveur (TKDynamicFps)</h2>
     <div id="fps-box" class="muted">Chargement…</div>
     <div class="row" style="margin-top:10px">
@@ -145,7 +175,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section>
+  <section data-tab="comptes">
     <h2>Bans (par SteamID)</h2>
     <div class="row" style="margin-bottom:10px">
       <input id="ban-steamid" placeholder="SteamID64 (7656119…)" style="width:210px" class="mono">
@@ -164,7 +194,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     <p id="ban-info" class="muted"></p>
   </section>
 
-  <section>
+  <section data-tab="joueurs">
     <h2>Donner un objet / un véhicule</h2>
     <div class="row" style="margin-bottom:10px">
       <span class="muted gl">Joueur</span>
@@ -186,7 +216,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section>
+  <section data-tab="comptes">
     <h2>Historique joueurs (tous les comptes, même hors ligne)</h2>
     <div class="row" style="margin-bottom:10px">
       <input id="hist-filter" placeholder="Filtrer (pseudo, perso, steamid)…" style="flex:1;min-width:200px" oninput="renderHistory()">
@@ -200,7 +230,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section>
+  <section data-tab="monde">
     <h2>Entreprises</h2>
     <div class="row" style="margin-bottom:10px">
       <input id="bizs-filter" placeholder="Filtrer (nom, propriétaire)…" style="flex:1;min-width:200px" oninput="renderBizs()">
@@ -214,7 +244,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section>
+  <section data-tab="monde">
     <h2>Optimisation FPS client (TKGhost)</h2>
     <div id="ghost-box" class="muted">Chargement…</div>
     <div class="row" style="margin-top:12px">
@@ -229,7 +259,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section>
+  <section data-tab="securite">
     <h2>Anti-cheat — détections (TKAntiCheat)</h2>
     <div class="tblwrap">
     <table>
@@ -239,7 +269,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
-  <section>
+  <section data-tab="securite">
     <h2>Anti-flood — IP bannies (TKAntiFlood)</h2>
     <div class="tblwrap">
     <table>
@@ -248,7 +278,41 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </table>
     </div>
   </section>
+  <section data-tab="chat">
+    <h2>Chat en direct <span class="muted" style="font-weight:400;font-size:12px">— historique conservé par jour sur le serveur</span></h2>
+    <div id="chat-box"><p class="muted">Chargement…</p></div>
+    <div class="row" style="margin-top:10px">
+      <input id="chat-input" style="flex:1;min-width:220px" placeholder="Parler en tant que [STAFF]…" onkeydown="if(event.key==='Enter')chatSend()">
+      <button class="primary" onclick="chatSend()">Envoyer</button>
+      <select id="chat-days" onchange="chatLoadDay()" title="Historique par jour"><option value="">Aujourd'hui (direct)</option></select>
+    </div>
+  </section>
+
+  <section data-tab="admins">
+    <h2>Gestion des administrateurs</h2>
+    <div class="row" style="margin-bottom:12px">
+      <input id="adm-steamid" placeholder="SteamID64 (7656119…)" class="mono" style="width:210px">
+      <select id="adm-level">
+        <option value="1">Niveau 1</option><option value="2">Niveau 2</option><option value="3">Niveau 3</option>
+        <option value="4">Niveau 4</option><option value="5" selected>Niveau 5</option><option value="6">Niveau 6</option>
+        <option value="7">Niveau 7</option><option value="8">Niveau 8</option><option value="9">Niveau 9</option>
+      </select>
+      <input id="adm-pin" placeholder="PIN (optionnel)" style="width:120px">
+      <button class="primary" onclick="admAdd()">Promouvoir</button>
+    </div>
+    <div class="tblwrap">
+    <table>
+      <thead><tr><th></th><th>Compte</th><th>SteamID</th><th>Niveau</th><th>Actions</th></tr></thead>
+      <tbody id="admins"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody>
+    </table>
+    </div>
+  </section>
 </main>
+
+<footer>
+  Panel hébergé gratuitement par <a href="https://teamkit.fr" target="_blank">TeamKit.fr</a>
+  &nbsp;·&nbsp; <a class="don" href="https://ko-fi.com/teamkit" target="_blank">❤ Soutenir TeamKit</a>
+</footer>
 
 <div id="toast"></div>
 
@@ -290,7 +354,7 @@ function login(){
   fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})})
     .then(function(r){ return r.json(); })
     .then(function(r){
-      if(r.ok){ auth = pw; localStorage.setItem('tkweb_auth', pw); hideLogin(); refresh(); loadCatalogs(); }
+      if(r.ok){ auth = pw; localStorage.setItem('tkweb_auth', pw); hideLogin(); refresh(); loadCatalogs(); chatPoll(); }
       else { document.getElementById('loginerr').textContent = r.error || 'Erreur'; }
     });
 }
@@ -341,6 +405,7 @@ function renderPlayers(){
         '<button onclick="tpPlayer(\'' + p.steamId + '\')" title="Téléporter">TP</button>' +
         '<button class="danger" onclick="kickPlayer(\'' + p.steamId + '\')">Kick</button>' +
         '<button class="danger" onclick="banPlayer(\'' + p.steamId + '\')">Ban</button>' +
+        '<button onclick="morePlayer(\'' + p.steamId + '\')" title="Autres actions">+</button>' +
       '</td></tr>';
   }).join('');
 }
@@ -632,6 +697,149 @@ function chooseItem(id){
   closeModal();
 }
 
+
+// --- Onglets ---
+function showTab(name){
+  document.querySelectorAll('[data-tab]').forEach(function(el){
+    el.style.display = el.getAttribute('data-tab') === name ? '' : 'none';
+  });
+  document.querySelectorAll('#tabs button').forEach(function(b){
+    b.className = b.getAttribute('data-nav') === name ? 'active' : '';
+  });
+  localStorage.setItem('tkweb_tab', name);
+  if(name === 'admins') loadAdmins(true);
+  if(name === 'chat') chatScrollBottom();
+}
+
+// --- Chat ---
+var chatLast = 0, chatDaysLoaded = false;
+function chatPoll(){
+  if(document.getElementById('chat-days').value !== '') return; // mode historique
+  api('chat?after=' + chatLast).then(function(r){
+    if(r.error) return;
+    if(r.messages && r.messages.length){
+      var box = document.getElementById('chat-box');
+      if(chatLast === 0) box.innerHTML = '';
+      var nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+      r.messages.forEach(function(m){
+        var d = document.createElement('div');
+        d.className = 'chatmsg';
+        var staff = m.pseudo.indexOf('[PANEL') === 0;
+        d.innerHTML = '<span class="t">' + esc(m.time) + '</span> ' +
+          '<span class="p' + (staff ? ' staff' : '') + '"' + (m.steamId ? ' onclick="chatFocus(\'' + m.steamId + '\')" title="Voir dans Joueurs"' : '') + '>' +
+          esc(m.pseudo) + '</span> : ' + esc(m.text);
+        box.appendChild(d);
+      });
+      while(box.children.length > 400) box.removeChild(box.firstChild);
+      chatLast = r.last;
+      if(nearBottom) chatScrollBottom();
+    } else if(chatLast === 0){
+      document.getElementById('chat-box').innerHTML = '<p class="muted">Aucun message pour l\'instant.</p>';
+      chatLast = r.last || 0;
+    }
+  }).catch(function(){});
+  if(!chatDaysLoaded){
+    chatDaysLoaded = true;
+    api('chathistory').then(function(r){
+      if(!r.days) return;
+      var sel = document.getElementById('chat-days');
+      r.days.forEach(function(d){
+        var o = document.createElement('option');
+        o.value = d; o.textContent = d;
+        sel.appendChild(o);
+      });
+    }).catch(function(){});
+  }
+}
+function chatScrollBottom(){
+  var box = document.getElementById('chat-box');
+  if(box) box.scrollTop = box.scrollHeight;
+}
+function chatLoadDay(){
+  var day = document.getElementById('chat-days').value;
+  var box = document.getElementById('chat-box');
+  if(day === ''){ box.innerHTML = ''; chatLast = 0; chatPoll(); return; }
+  api('chathistory?date=' + day).then(function(r){
+    if(r.error){ box.innerHTML = '<p class="muted">' + esc(r.error) + '</p>'; return; }
+    box.innerHTML = r.lines.map(function(l){ return '<div class="chatmsg">' + esc(l) + '</div>'; }).join('');
+    chatScrollBottom();
+  });
+}
+function chatSend(){
+  var el = document.getElementById('chat-input');
+  if(!el.value) return;
+  api('chatsend', {text: el.value}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { el.value = ''; chatPoll(); }
+  });
+}
+function chatFocus(steamId){
+  showTab('joueurs');
+  document.getElementById('players-filter').value = steamId;
+  renderPlayers();
+}
+
+// --- Admins ---
+function loadAdmins(quiet){
+  api('admins').then(function(list){
+    if(list.error){ if(!quiet) toast(list.error, true); return; }
+    var tb = document.getElementById('admins');
+    if(!list.length){ tb.innerHTML = '<tr><td colspan="5" class="muted">Aucun administrateur</td></tr>'; return; }
+    tb.innerHTML = list.map(function(a){
+      return '<tr><td><span class="dot ' + (a.online ? 'on' : 'off') + '"></span></td>' +
+        '<td><b>' + esc(a.username || '?') + '</b></td>' +
+        '<td class="mono">' + esc(a.steamId) + '</td>' +
+        '<td><span class="badge admin">niveau ' + a.level + '</span></td>' +
+        '<td class="actions">' +
+          '<button onclick="admLevel(\'' + a.steamId + '\',' + a.level + ')">Changer niveau</button>' +
+          '<button class="danger" onclick="if(confirm(\'Retirer les droits admin ?\'))admSet(\'' + a.steamId + '\',0,\'\')">Retirer</button>' +
+        '</td></tr>';
+    }).join('');
+  }).catch(function(){});
+}
+function admAdd(){
+  var id = document.getElementById('adm-steamid').value.trim();
+  if(!id) return toast('SteamID manquant', true);
+  admSet(id, parseInt(document.getElementById('adm-level').value), document.getElementById('adm-pin').value.trim());
+}
+function admLevel(steamId, current){
+  var l = prompt('Nouveau niveau admin (0 = retirer) :', current);
+  if(l === null) return;
+  admSet(steamId, parseInt(l) || 0, '');
+}
+function admSet(steamId, level, pin){
+  api('setadmin', {steamId: steamId, level: level, pin: pin}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast(level > 0 ? 'Niveau ' + level + ' appliqu\u00e9' : 'Droits retir\u00e9s'); loadAdmins(true); loadHistory(true); }
+  });
+}
+
+// --- Actions bonus joueur (+) ---
+function morePlayer(id){
+  var pl = playersCache.filter(function(p){ return p.steamId === id; })[0];
+  var who = pl ? pl.pseudo : id;
+  openModal('<h3>' + esc(who) + ' — autres actions</h3>' +
+    '<button onclick="closeModal();notifyPlayer(\'' + id + '\')">📢 Notification à l\'écran</button>' +
+    '<button onclick="closeModal();xpPlayer(\'' + id + '\')">✨ Donner de l\'XP</button>' +
+    '<button onclick="closeModal();prisonPlayer(\'' + id + '\')">⚖️ Prison / libérer</button>' +
+    '<button onclick="closeModal()" style="margin-top:8px;text-align:center">Annuler</button>');
+}
+function notifyPlayer(id){
+  var t = prompt('Titre de la notification :', 'Administration');
+  if(t === null) return;
+  var x = prompt('Message :');
+  if(!x) return;
+  act('notify', {steamId: id, title: t, text: x}, 'Notification envoy\u00e9e');
+}
+function xpPlayer(id){
+  var a = prompt('Quantit\u00e9 d\'XP à donner :', '50');
+  if(a === null) return;
+  act('givexp', {steamId: id, amount: parseInt(a) || 0}, 'XP donn\u00e9');
+}
+function prisonPlayer(id){
+  var m = prompt('Minutes de prison (0 = lib\u00e9rer) :', '15');
+  if(m === null) return;
+  act('prison', {steamId: id, minutes: parseInt(m) || 0}, 'Peine appliqu\u00e9e');
+}
+
 function showInventory(){
   var steamId = document.getElementById('give-player').value;
   if(!steamId) return toast('Sélectionne un joueur', true);
@@ -902,8 +1110,9 @@ setInterval(function(){
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('fr-FR');
 }, 1000);
 
-if(auth){ hideLogin(); refresh(); loadCatalogs(); } else { showLogin(); }
-setInterval(function(){ if(auth && document.getElementById('login').style.display === 'none') refresh(); }, 5000);
+showTab(localStorage.getItem('tkweb_tab') || 'dashboard');
+if(auth){ hideLogin(); refresh(); loadCatalogs(); chatPoll(); } else { showLogin(); }
+setInterval(function(){ if(auth && document.getElementById('login').style.display === 'none'){ refresh(); chatPoll(); } }, 5000);
 </script>
 </body>
 </html>

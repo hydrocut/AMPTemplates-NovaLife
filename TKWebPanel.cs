@@ -18,7 +18,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKWebPanel v1.8 — TeamKit.fr
+/// TKWebPanel v2.0 — TeamKit.fr
 ///
 /// Panel d'administration web embarqué dans le serveur Nova-Life.
 /// Le plugin démarre un serveur HTTP (port configurable, défaut 7791) qui
@@ -50,13 +50,106 @@ public class TKWebPanel : Plugin
     {
     }
 
+    // ------------------------------------------------------------------
+    // Chat : capture, historique fichier, diffusion
+    // ------------------------------------------------------------------
+    private static readonly object chatLock = new object();
+    private static readonly List<string> chatRing = new List<string>(); // entrées JSON prêtes
+    private static long chatLastId;
+    private static string chatDir;
+
+    public override void OnPlayerText(Player player, string message)
+    {
+        base.OnPlayerText(player, message);
+        try
+        {
+            string pseudo = player != null ? (player.steamUsername ?? "?") : "?";
+            string steamId = player != null ? player.steamId.ToString() : "";
+            RecordChat(pseudo, steamId, message);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void RecordChat(string pseudo, string steamId, string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+        string time = DateTime.Now.ToString("HH:mm:ss");
+        lock (chatLock)
+        {
+            chatLastId++;
+            string json = "{\"id\":" + chatLastId + ",\"time\":" + Json.Str(time)
+                + ",\"pseudo\":" + Json.Str(pseudo) + ",\"steamId\":\"" + steamId + "\""
+                + ",\"text\":" + Json.Str(text) + "}";
+            chatRing.Add(json);
+            while (chatRing.Count > 300)
+            {
+                chatRing.RemoveAt(0);
+            }
+        }
+        try
+        {
+            if (chatDir != null)
+            {
+                File.AppendAllText(Path.Combine(chatDir, "chat-" + DateTime.Now.ToString("yyyy-MM-dd") + ".log"),
+                    "[" + time + "] " + pseudo + " (" + steamId + ") : " + text.Replace("\r", " ").Replace("\n", " ") + Environment.NewLine);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void InitChat()
+    {
+        try
+        {
+            chatDir = Path.Combine(pluginDir, "chat");
+            if (!Directory.Exists(chatDir))
+            {
+                Directory.CreateDirectory(chatDir);
+            }
+            // recharge la fin du fichier du jour pour garder l'historique après restart
+            string today = Path.Combine(chatDir, "chat-" + DateTime.Now.ToString("yyyy-MM-dd") + ".log");
+            if (File.Exists(today))
+            {
+                string[] lines = File.ReadAllLines(today);
+                int start = Math.Max(0, lines.Length - 200);
+                for (int i = start; i < lines.Length; i++)
+                {
+                    Match m = Regex.Match(lines[i], @"^\[(?<t>[\d:]+)\] (?<p>.*) \((?<s>\d*)\) : (?<x>.*)$");
+                    if (!m.Success)
+                    {
+                        continue;
+                    }
+                    lock (chatLock)
+                    {
+                        chatLastId++;
+                        chatRing.Add("{\"id\":" + chatLastId + ",\"time\":" + Json.Str(m.Groups["t"].Value)
+                            + ",\"pseudo\":" + Json.Str(m.Groups["p"].Value) + ",\"steamId\":\"" + m.Groups["s"].Value + "\""
+                            + ",\"text\":" + Json.Str(m.Groups["x"].Value) + "}");
+                    }
+                }
+                Debug.Log("[TKWEB] Historique de chat rechargé (" + chatRing.Count + " messages du jour)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKWEB] Erreur init chat : " + ex.Message);
+        }
+    }
+
     public override void OnPluginInit()
     {
         base.OnPluginInit();
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.8 désactivé par config");
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.0 désactivé par config");
             return;
         }
         try
@@ -74,7 +167,8 @@ public class TKWebPanel : Plugin
             httpThread.IsBackground = true;
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.8 initialisé — panel sur le port " + port);
+            InitChat();
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.0 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -392,6 +486,22 @@ public class TKWebPanel : Plugin
                 return ApiBizs();
             case "/api/heavyareas":
                 return ApiHeavyAreas();
+            case "/api/chat":
+                return ApiChat(ctx.Request.QueryString["after"]);
+            case "/api/chatsend":
+                return ApiChatSend(body);
+            case "/api/chathistory":
+                return ApiChatHistory(ctx.Request.QueryString["date"]);
+            case "/api/admins":
+                return ApiAdmins();
+            case "/api/setadmin":
+                return ApiSetAdmin(body);
+            case "/api/notify":
+                return ApiNotify(body);
+            case "/api/prison":
+                return ApiPrison(body);
+            case "/api/givexp":
+                return ApiGiveXp(body);
             case "/api/ghoststats":
                 return (string)RunOnMain(ApiGhostStats);
             case "/api/floodbans":
@@ -1991,6 +2101,278 @@ public class TKWebPanel : Plugin
     private class MaxObjRow
     {
         public int MaxObjects { get; set; }
+    }
+
+    // ------------------------------------------------------------------
+    // Chat (v2.0)
+    // ------------------------------------------------------------------
+    private string ApiChat(string afterStr)
+    {
+        long after = 0;
+        long.TryParse(afterStr ?? "0", out after);
+        StringBuilder sb = new StringBuilder();
+        lock (chatLock)
+        {
+            sb.Append("{\"last\":").Append(chatLastId).Append(",\"messages\":[");
+            bool first = true;
+            foreach (string entry in chatRing)
+            {
+                Match m = Regex.Match(entry, "\"id\":(?<i>\\d+)");
+                if (m.Success && long.Parse(m.Groups["i"].Value) <= after)
+                {
+                    continue;
+                }
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append(entry);
+            }
+            sb.Append("]}");
+        }
+        return sb.ToString();
+    }
+
+    private string ApiChatSend(string body)
+    {
+        string text = Json.GetString(body, "text", "");
+        if (string.IsNullOrEmpty(text))
+        {
+            return "{\"error\":\"message vide\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            if (Nova.server == null)
+            {
+                return "{\"error\":\"serveur indisponible\"}";
+            }
+            Nova.server.SendMessageToAll("<color=#ff8800>[STAFF]</color> <color=#ffffff>" + text + "</color>");
+            RecordChat("[PANEL STAFF]", "", text);
+            return "{\"ok\":true}";
+        });
+    }
+
+    private string ApiChatHistory(string date)
+    {
+        if (string.IsNullOrEmpty(date) || !Regex.IsMatch(date, @"^\d{4}-\d{2}-\d{2}$"))
+        {
+            // liste des jours disponibles
+            StringBuilder days = new StringBuilder("[");
+            try
+            {
+                bool first = true;
+                List<string> files = new List<string>(Directory.GetFiles(chatDir, "chat-*.log"));
+                files.Sort();
+                files.Reverse();
+                foreach (string f in files)
+                {
+                    Match m = Regex.Match(Path.GetFileName(f), @"^chat-(\d{4}-\d{2}-\d{2})\.log$");
+                    if (!m.Success) continue;
+                    if (!first) days.Append(",");
+                    first = false;
+                    days.Append(Json.Str(m.Groups[1].Value));
+                }
+            }
+            catch
+            {
+            }
+            days.Append("]");
+            return "{\"days\":" + days + "}";
+        }
+        try
+        {
+            string file = Path.Combine(chatDir, "chat-" + date + ".log");
+            if (!File.Exists(file))
+            {
+                return "{\"error\":\"aucun chat ce jour-là\"}";
+            }
+            string[] lines = File.ReadAllLines(file);
+            StringBuilder sb = new StringBuilder("{\"lines\":[");
+            int start = Math.Max(0, lines.Length - 1000);
+            for (int i = start; i < lines.Length; i++)
+            {
+                if (i > start) sb.Append(",");
+                sb.Append(Json.Str(lines[i]));
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Gestion des admins (v2.0)
+    // ------------------------------------------------------------------
+    private class AdminRow
+    {
+        public string SteamId { get; set; }
+        public string Username { get; set; }
+        public int AdminLevel { get; set; }
+    }
+
+    private string ApiAdmins()
+    {
+        HashSet<string> online = new HashSet<string>();
+        try
+        {
+            object result = RunOnMain(delegate
+            {
+                HashSet<string> ids = new HashSet<string>();
+                foreach (Player p in Nova.server.GetAllPlayers())
+                {
+                    if (p != null) ids.Add(p.steamId.ToString());
+                }
+                return ids;
+            });
+            online = (HashSet<string>)result;
+        }
+        catch
+        {
+        }
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            foreach (AdminRow a in conn.Query<AdminRow>(
+                "SELECT SteamId, Username, AdminLevel FROM Accounts WHERE AdminLevel > 0 ORDER BY AdminLevel DESC, Username"))
+            {
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"steamId\":").Append(Json.Str(a.SteamId ?? ""));
+                sb.Append(",\"username\":").Append(Json.Str(a.Username ?? ""));
+                sb.Append(",\"level\":").Append(a.AdminLevel);
+                sb.Append(",\"online\":").Append(online.Contains(a.SteamId ?? "") ? "true" : "false");
+                sb.Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    private string ApiSetAdmin(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        int level = Json.GetInt(body, "level", -1);
+        string pin = Json.GetString(body, "pin", "");
+        if (string.IsNullOrEmpty(steamId) || level < 0 || level > 9)
+        {
+            return "{\"error\":\"steamId ou niveau invalide (0-9)\"}";
+        }
+        // joueur en ligne : applique en direct
+        string onlineResult = (string)RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.account == null)
+            {
+                return null;
+            }
+            p.account.adminLevel = level;
+            if (!string.IsNullOrEmpty(pin))
+            {
+                p.account.adminPin = pin;
+            }
+            LifeDB.SaveAccount(p.account);
+            try
+            {
+                p.Notify("Administration", level > 0 ? ("Niveau admin " + level + " attribué") : "Droits admin retirés");
+            }
+            catch
+            {
+            }
+            Debug.Log("[TKWEB] SETADMIN steamid=" + steamId + " niveau=" + level + " (en ligne)");
+            return "{\"ok\":true,\"online\":true}";
+        });
+        if (onlineResult != null)
+        {
+            return onlineResult;
+        }
+        Account account = LifeDB.FetchAccount(steamId).Result;
+        if (account == null)
+        {
+            return "{\"error\":\"aucun compte avec ce SteamID\"}";
+        }
+        account.adminLevel = level;
+        if (!string.IsNullOrEmpty(pin))
+        {
+            account.adminPin = pin;
+        }
+        bool saved = LifeDB.SaveAccount(account).Result;
+        Debug.Log("[TKWEB] SETADMIN steamid=" + steamId + " niveau=" + level + " (hors ligne)");
+        return saved ? "{\"ok\":true,\"online\":false}" : "{\"error\":\"échec sauvegarde\"}";
+    }
+
+    // ------------------------------------------------------------------
+    // Actions bonus (v2.0) : notification, prison, XP
+    // ------------------------------------------------------------------
+    private string ApiNotify(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        string title = Json.GetString(body, "title", "Administration");
+        string text = Json.GetString(body, "text", "");
+        if (string.IsNullOrEmpty(text))
+        {
+            return "{\"error\":\"texte vide\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.setup == null)
+            {
+                return "{\"error\":\"joueur introuvable ou pas en jeu\"}";
+            }
+            p.Notify(title, text);
+            return "{\"ok\":true}";
+        });
+    }
+
+    private string ApiPrison(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        int minutes = Json.GetInt(body, "minutes", -1);
+        if (minutes < 0)
+        {
+            return "{\"error\":\"durée invalide (0 = libérer)\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.setup == null)
+            {
+                return "{\"error\":\"joueur introuvable ou pas en jeu\"}";
+            }
+            p.SetPrisonTime(minutes);
+            p.Notify("Justice", minutes > 0 ? ("Vous êtes emprisonné " + minutes + " minutes") : "Vous êtes libéré");
+            Debug.Log("[TKWEB] PRISON steamid=" + steamId + " minutes=" + minutes);
+            return "{\"ok\":true}";
+        });
+    }
+
+    private string ApiGiveXp(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        int amount = Json.GetInt(body, "amount", 0);
+        if (amount <= 0)
+        {
+            return "{\"error\":\"quantité invalide\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.setup == null)
+            {
+                return "{\"error\":\"joueur introuvable ou pas en jeu\"}";
+            }
+            p.GiveXP(amount);
+            p.Notify("Expérience", "+" + amount + " XP (staff)");
+            Debug.Log("[TKWEB] GIVEXP steamid=" + steamId + " +" + amount);
+            return "{\"ok\":true}";
+        });
     }
 
     private string ApiAntiCheat()
