@@ -39,7 +39,7 @@ footer .don:hover{color:#ff8fa0}
 button.actk{padding:4px 10px;font-size:12px}
 button.actk.active{border-color:var(--accent);color:var(--accent)}
 header .right{margin-left:auto;display:flex;gap:10px;align-items:center}
-main{max-width:1180px;margin:0 auto;padding:20px}
+main{max-width:1420px;margin:0 auto;padding:20px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
 .card .v{font-size:22px;font-weight:700;color:var(--accent)}
@@ -47,7 +47,15 @@ main{max-width:1180px;margin:0 auto;padding:20px}
 section{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px}
 section h2{font-size:15px;margin-bottom:12px;color:var(--accent)}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border);white-space:nowrap}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{max-width:230px;overflow:hidden;text-overflow:ellipsis}
+td.actions{max-width:none;overflow:visible}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2a3245;border-radius:8px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#3d4a66}
+::-webkit-scrollbar-corner{background:transparent}
+html{scrollbar-width:thin;scrollbar-color:#2a3245 transparent}
 th{color:var(--muted);font-weight:600;font-size:12px}
 tr:hover td{background:#1b2232}
 .tblwrap{overflow-x:auto}
@@ -265,7 +273,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
     <div class="tblwrap" id="heavy-wrap" style="display:none;margin-top:10px">
     <table>
-      <thead><tr><th>Terrain</th><th>Objets posés</th><th>Limite (MaxObjects)</th><th>Propriétaire</th></tr></thead>
+      <thead><tr><th>Terrain</th><th>Objets posés</th><th>Limite (MaxObjects)</th><th>Propriétaire</th><th>Actions</th></tr></thead>
       <tbody id="heavyareas"></tbody>
     </table>
     </div>
@@ -645,9 +653,28 @@ function loadHeavyAreas(){
       return '<tr><td class="mono">#' + a.areaId + '</td>' +
         '<td><b style="color:' + col + '">' + a.objects + '</b></td>' +
         '<td>' + (a.maxObjects > 0 ? a.maxObjects : '—') + '</td>' +
-        '<td>' + (a.ownerName ? esc(a.ownerName) : '<span class="muted">—</span>') + '</td></tr>';
+        '<td>' + (a.ownerName ? esc(a.ownerName) : '<span class="muted">—</span>') + '</td>' +
+        '<td class="actions">' + (myLevel() >= 2 ?
+          '<button onclick="setAreaLimit(' + a.areaId + ',' + a.objects + ')">Fixer la limite</button>' +
+          (a.ownerName ? '<button onclick="notifyAreaOwner(' + a.areaId + ')">Notifier le proprio</button>' : '')
+          : '') + '</td></tr>';
     }).join('');
     toast(list.length + ' terrain(s) analysés');
+  });
+}
+
+function setAreaLimit(areaId, current){
+  var n = prompt('Limite d’objets pour le terrain #' + areaId + ' (actuellement ' + current + ' posés, -1 = illimité) :', Math.max(100, Math.ceil(current / 100) * 100));
+  if(n === null) return;
+  api('setarealimit', {areaId: areaId, maxObjects: parseInt(n)}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Limite appliquée (les objets existants restent)'); loadHeavyAreas(); }
+  });
+}
+function notifyAreaOwner(areaId){
+  var t = prompt('Message au propriétaire du terrain #' + areaId + ' :', 'Votre terrain #' + areaId + ' contient trop d’objets et fait chuter les FPS : merci de l’alléger.');
+  if(t === null) return;
+  api('notifyareaowner', {areaId: areaId, text: t}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Notifié : ' + (r.pseudo || 'ok')); }
   });
 }
 

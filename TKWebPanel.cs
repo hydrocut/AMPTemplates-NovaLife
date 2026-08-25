@@ -326,7 +326,7 @@ public class TKWebPanel : Plugin
             InitActivity();
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.4.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.5 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -810,6 +810,10 @@ public class TKWebPanel : Plugin
                 return ApiBizs();
             case "/api/heavyareas":
                 return ApiHeavyAreas();
+            case "/api/setarealimit":
+                return ApiSetAreaLimit(body);
+            case "/api/notifyareaowner":
+                return ApiNotifyAreaOwner(body);
             case "/api/chat":
                 return ApiChat(ctx.Request.QueryString["after"]);
             case "/api/chatsend":
@@ -2411,6 +2415,86 @@ public class TKWebPanel : Plugin
         return "{\"pluginLoaded\":" + (pluginLoaded ? "true" : "false")
             + ",\"real\":" + real + ",\"ghosts\":" + ghosts + ",\"stowed\":" + stowed
             + ",\"ghostedSinceBoot\":" + ghosted + "}";
+    }
+
+    // Fixe la limite d'objets d'un terrain (en mémoire + base, sans restart)
+    private string ApiSetAreaLimit(string body)
+    {
+        int areaId = Json.GetInt(body, "areaId", -1);
+        int maxObjects = Json.GetInt(body, "maxObjects", -2);
+        if (areaId < 0 || maxObjects < -1 || maxObjects > 100000)
+        {
+            return "{\"error\":\"paramètres invalides (-1 = illimité)\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            Life.AreaSystem.LifeArea area = Nova.a.GetAreaById((uint)areaId);
+            if (area == null)
+            {
+                return "{\"error\":\"terrain introuvable\"}";
+            }
+            area.maxObjects = maxObjects;
+            LifeDB.SaveArea(area);
+            Debug.Log("[TKWEB] AREALIMIT terrain=" + areaId + " maxObjects=" + maxObjects);
+            StaffLog("limite du terrain #" + areaId + " fixée à " + (maxObjects < 0 ? "illimité" : maxObjects.ToString()) + " objets");
+            return "{\"ok\":true}";
+        });
+    }
+
+    // Notifie le propriétaire du terrain (s'il est en ligne)
+    private string ApiNotifyAreaOwner(string body)
+    {
+        int areaId = Json.GetInt(body, "areaId", -1);
+        string text = Json.GetString(body, "text", "");
+        if (areaId < 0)
+        {
+            return "{\"error\":\"areaId invalide\"}";
+        }
+        if (string.IsNullOrEmpty(text))
+        {
+            text = "Votre terrain #" + areaId + " contient trop d'objets et fait chuter les FPS : merci de l'alléger.";
+        }
+        string msg = text;
+        return (string)RunOnMain(delegate
+        {
+            Life.AreaSystem.LifeArea area = Nova.a.GetAreaById((uint)areaId);
+            if (area == null)
+            {
+                return "{\"error\":\"terrain introuvable\"}";
+            }
+            int ownerId = -1;
+            try
+            {
+                if (area.permissions != null && area.permissions.owner != null)
+                {
+                    ownerId = area.permissions.owner.characterId;
+                }
+            }
+            catch
+            {
+            }
+            if (ownerId <= 0)
+            {
+                return "{\"error\":\"ce terrain n'a pas de propriétaire joueur\"}";
+            }
+            foreach (Player p in Nova.server.GetAllInGamePlayers())
+            {
+                try
+                {
+                    if (p != null && p.character != null && p.character.Id == ownerId)
+                    {
+                        p.Notify("Terrain #" + areaId, msg);
+                        p.SendText("<color=#ffb454>[STAFF]</color> " + msg);
+                        StaffLog("notifie le proprio du terrain #" + areaId + " (" + PseudoOf(p) + ") : " + msg);
+                        return "{\"ok\":true,\"pseudo\":" + Json.Str(PseudoOf(p)) + "}";
+                    }
+                }
+                catch
+                {
+                }
+            }
+            return "{\"error\":\"le propriétaire (perso #" + ownerId + ") n'est pas en ligne\"}";
+        });
     }
 
     private class HeavyAreaRow
