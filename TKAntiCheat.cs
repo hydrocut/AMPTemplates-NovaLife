@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.0 — TeamKit.fr
+/// TKAntiCheat v1.1 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -62,7 +62,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.0 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.1 désactivé par config");
             return;
         }
         HookEvents();
@@ -78,7 +78,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.0 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.1 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -92,11 +92,12 @@ public class TKAntiCheat : Plugin
         {
             Nova.server.OnPlayerMoneyEvent += delegate (Player p, double amount, string reason) { OnMoney(p, amount, reason, false); };
             Nova.server.OnPlayerBankEvent += delegate (Player p, double amount, string reason) { OnMoney(p, amount, reason, true); };
+            Nova.server.OnPlayerReceiveItemEvent += delegate (Player p, int itemId, int slotId, int number) { OnItem(p, itemId, number); };
             Nova.server.OnPlayerConnectEvent += delegate (Player p) { MarkTeleport(p); };
             Nova.server.OnPlayerSpawnCharacterEvent += delegate (Player p) { MarkTeleport(p); };
             Nova.server.OnPlayerDeathEvent += delegate (Player p) { MarkTeleport(p); };
             hooked = true;
-            Debug.Log("[TKAC] Événements branchés (argent, connexion, spawn, mort)");
+            Debug.Log("[TKAC] Événements branchés (argent, items, connexion, spawn, mort)");
         }
         catch (Exception ex)
         {
@@ -151,6 +152,40 @@ public class TKAntiCheat : Plugin
         Alert("ARGENT", pseudo, p.steamId,
             "+" + amount.ToString("0") + (bank ? " banque" : " espèces")
             + " raison=\"" + (reason ?? "") + "\"");
+    }
+
+    // steamId|itemId -> (fenetreDebut, total, dernierLog)
+    private readonly Dictionary<string, double[]> itemWindows = new Dictionary<string, double[]>();
+
+    // Détection "spawn d'items" (mod menus) : grosse quantité d'un coup,
+    // ou accumulation rapide du même item.
+    private void OnItem(Player p, int itemId, int number)
+    {
+        if (p == null || number <= 0)
+        {
+            return;
+        }
+        if (number >= config.itemAlertQuantity)
+        {
+            Alert("ITEMS", SafePseudo(p), p.steamId, "reçoit " + number + "x item " + itemId + " d'un coup");
+            return;
+        }
+        string key = p.steamId + "|" + itemId;
+        double now = Time.realtimeSinceStartup;
+        double[] w;
+        if (!itemWindows.TryGetValue(key, out w) || now - w[0] > 60)
+        {
+            itemWindows[key] = new double[] { now, number, 0 };
+            return;
+        }
+        w[1] += number;
+        if (w[1] >= config.itemWindowTotal && now - w[2] > 60)
+        {
+            w[2] = now;
+            Alert("ITEMS", SafePseudo(p), p.steamId, ((int)w[1]) + "x item " + itemId + " en moins d'une minute");
+            w[0] = now;
+            w[1] = 0;
+        }
     }
 
     // Appelé par le ticker sur le thread principal
@@ -346,6 +381,10 @@ public class TKAntiCheatConfig
     public float teleportDistance = 120f;
     // Grâce après connexion/mort/spawn (s) : on ne juge pas la vitesse
     public float teleportGraceSeconds = 6f;
+    // Quantité d'un même item reçue en une fois qui déclenche une alerte
+    public int itemAlertQuantity = 50;
+    // Total du même item accumulé en < 60 s qui déclenche une alerte
+    public int itemWindowTotal = 200;
     // Période de relevé des positions (s)
     public int checkIntervalSeconds = 1;
     // Nb d'alertes gardées en mémoire/fichier
@@ -367,6 +406,8 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"maxSpeed\": " + c.maxSpeed.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"teleportDistance\": " + c.teleportDistance.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"teleportGraceSeconds\": " + c.teleportGraceSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
+        sb.AppendLine("  \"itemAlertQuantity\": " + c.itemAlertQuantity + ",");
+        sb.AppendLine("  \"itemWindowTotal\": " + c.itemWindowTotal + ",");
         sb.AppendLine("  \"checkIntervalSeconds\": " + c.checkIntervalSeconds + ",");
         sb.AppendLine("  \"maxAlerts\": " + c.maxAlerts + ",");
         sb.Append("  \"reasonWhitelist\": [");
@@ -395,6 +436,8 @@ public class TKAntiCheatConfig
         c.maxSpeed = (float)GetDouble(json, "maxSpeed", c.maxSpeed);
         c.teleportDistance = (float)GetDouble(json, "teleportDistance", c.teleportDistance);
         c.teleportGraceSeconds = (float)GetDouble(json, "teleportGraceSeconds", c.teleportGraceSeconds);
+        c.itemAlertQuantity = (int)GetDouble(json, "itemAlertQuantity", c.itemAlertQuantity);
+        c.itemWindowTotal = (int)GetDouble(json, "itemWindowTotal", c.itemWindowTotal);
         c.checkIntervalSeconds = (int)GetDouble(json, "checkIntervalSeconds", c.checkIntervalSeconds);
         c.maxAlerts = (int)GetDouble(json, "maxAlerts", c.maxAlerts);
         Match m = Regex.Match(json, "\"reasonWhitelist\"\\s*:\\s*\\[(?<v>[^\\]]*)\\]");
