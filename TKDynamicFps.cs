@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKDynamicFps v1.0 — TeamKit.fr
+/// TKDynamicFps v1.1 — TeamKit.fr
 ///
 /// Framerate serveur adaptatif pour Nova-Life : réduit la consommation CPU
 /// quand le serveur est vide ou chargé, sans toucher au confort des joueurs.
@@ -44,7 +44,7 @@ public class TKDynamicFps : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.0 désactivé par config");
+            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.1 désactivé par config");
             return;
         }
         try
@@ -53,7 +53,7 @@ public class TKDynamicFps : Plugin
             UnityEngine.Object.DontDestroyOnLoad(go);
             TKDynamicFpsTicker ticker = go.AddComponent<TKDynamicFpsTicker>();
             ticker.config = config;
-            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.0 initialisé (idle "
+            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.1 initialisé (idle "
                 + config.idleFps + " / base " + config.minPlayersFps + " / max " + config.maxFps
                 + " FPS, seuils CPU " + config.cpuLowPercent + "-" + config.cpuHighPercent
                 + "% sur " + config.allocatedCores + " cœurs)");
@@ -97,17 +97,23 @@ public class TKDynamicFps : Plugin
 
 public class TKDynamicFpsTicker : MonoBehaviour
 {
+    // Accès inter-plugins (TKWebPanel pilote les FPS via réflexion)
+    public static TKDynamicFpsTicker Instance;
+
     public TKDynamicFpsConfig config;
+    // > 0 : framerate forcé (via panel) ; -1 : mode automatique
+    public int forcedFps = -1;
+    public int desiredFps = -1;
 
     private float accum;
     private Process process;
     private TimeSpan lastCpuTime;
     private float lastWallTime;
     private bool cpuAvailable = true;
-    private int desiredFps = -1;
 
     private void Start()
     {
+        Instance = this;
         try
         {
             process = Process.GetCurrentProcess();
@@ -138,6 +144,16 @@ public class TKDynamicFpsTicker : MonoBehaviour
     {
         if (config == null)
         {
+            return;
+        }
+
+        // Framerate forcé depuis le panel web : prioritaire sur tout
+        if (forcedFps > 0)
+        {
+            if (Application.targetFrameRate != forcedFps || desiredFps != forcedFps)
+            {
+                Apply(forcedFps, PlayerCount(), -1, "forcé via panel");
+            }
             return;
         }
 

@@ -97,6 +97,21 @@ input:focus{outline:none;border-color:var(--accent)}
   </section>
 
   <section>
+    <h2>Framerate serveur (TKDynamicFps)</h2>
+    <div id="fps-box" class="muted">Chargement…</div>
+    <div class="row" style="margin-top:10px">
+      <span class="muted">Forcer :</span>
+      <button onclick="setFps(-1)">Auto</button>
+      <button onclick="setFps(20)">20</button>
+      <button onclick="setFps(30)">30</button>
+      <button onclick="setFps(45)">45</button>
+      <button onclick="setFps(60)">60</button>
+      <input id="fps-custom" type="number" min="10" max="240" placeholder="perso" style="width:80px">
+      <button onclick="setFpsCustom()">Appliquer</button>
+    </div>
+  </section>
+
+  <section>
     <h2>Bans (par SteamID)</h2>
     <div class="row" style="margin-bottom:10px">
       <input id="ban-steamid" placeholder="SteamID64 (7656119…)" style="width:210px" class="mono">
@@ -113,6 +128,27 @@ input:focus{outline:none;border-color:var(--accent)}
       <button onclick="checkBan()">Vérifier</button>
     </div>
     <p id="ban-info" class="muted"></p>
+  </section>
+
+  <section>
+    <h2>Donner un objet / un véhicule</h2>
+    <div class="row" style="margin-bottom:10px">
+      <select id="give-player" style="min-width:180px"></select>
+      <span style="color:var(--muted)">|</span>
+      <input id="item-search" list="item-list" placeholder="Objet (nom ou id)" style="width:220px">
+      <datalist id="item-list"></datalist>
+      <input id="item-qty" type="number" value="1" min="1" style="width:70px">
+      <button class="primary" onclick="giveItem(true)">Donner</button>
+      <button onclick="giveItem(false)">Retirer</button>
+      <button onclick="showInventory()">Voir inventaire</button>
+    </div>
+    <div class="row">
+      <input id="veh-search" list="veh-list" placeholder="Véhicule (nom ou modelId)" style="width:220px">
+      <datalist id="veh-list"></datalist>
+      <button class="primary" onclick="giveVehicle()">Donner le véhicule</button>
+      <button onclick="showVehicles()">Voir garage du joueur</button>
+    </div>
+    <div id="give-info" class="muted" style="margin-top:10px"></div>
   </section>
 
   <section>
@@ -164,7 +200,7 @@ function login(){
   fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})})
     .then(function(r){ return r.json(); })
     .then(function(r){
-      if(r.ok){ auth = pw; localStorage.setItem('tkweb_auth', pw); hideLogin(); refresh(); }
+      if(r.ok){ auth = pw; localStorage.setItem('tkweb_auth', pw); hideLogin(); refresh(); loadCatalogs(); }
       else { document.getElementById('loginerr').textContent = r.error || 'Erreur'; }
     });
 }
@@ -218,6 +254,22 @@ function refresh(){
           '<button class="danger" onclick="banPlayer(\'' + p.steamId + '\')">Ban</button>' +
         '</td></tr>';
     }).join('');
+  }).catch(function(){});
+
+  // remplit le sélecteur de joueur (give)
+  var sel = document.getElementById('give-player');
+  var prev = sel.value;
+  sel.innerHTML = playersCache.map(function(p){
+    return '<option value="' + p.steamId + '">' + esc(p.pseudo) + (p.firstname ? ' (' + esc(p.firstname + ' ' + p.lastname) + ')' : '') + '</option>';
+  }).join('');
+  if(prev) sel.value = prev;
+
+  api('fps').then(function(f){
+    var box = document.getElementById('fps-box');
+    if(!f.available){ box.innerHTML = '<span class="muted">TKDynamicFps non chargé</span>'; return; }
+    var mode = f.forced > 0 ? ('<b style="color:var(--warn)">FORCÉ à ' + f.forced + '</b>') : '<b style="color:var(--ok)">AUTO</b>';
+    box.innerHTML = 'Mode : ' + mode + ' &nbsp;·&nbsp; Réel : <b>' + f.actual + '</b> FPS &nbsp;·&nbsp; Cible : <b>' + f.target +
+      '</b> &nbsp;·&nbsp; <span class="muted">plage auto ' + f.idleFps + '–' + f.maxFps + ' (base ' + f.minPlayersFps + ')</span>';
   }).catch(function(){});
 
   api('floodbans').then(function(list){
@@ -314,11 +366,106 @@ function floodUnban(ip){
   act('floodunban', {ip: ip}, 'IP retirée du fichier (redémarrage requis si encore en mémoire)');
 }
 
+// --- FPS ---
+function setFps(v){ act('fps', {force: v}, v < 0 ? 'FPS repassé en auto' : 'FPS forcé à ' + v); }
+function setFpsCustom(){
+  var v = parseInt(document.getElementById('fps-custom').value);
+  if(!v || v < 10) return toast('Valeur FPS invalide', true);
+  setFps(v);
+}
+
+// --- Items & véhicules ---
+var itemsLoaded = false, vehModelsLoaded = false;
+function loadCatalogs(){
+  if(!itemsLoaded){
+    api('items').then(function(list){
+      itemsLoaded = true;
+      window._items = list;
+      document.getElementById('item-list').innerHTML = list.map(function(it){
+        return '<option value="' + esc(it.name) + '">#' + it.id + '</option>';
+      }).join('');
+    }).catch(function(){});
+  }
+  if(!vehModelsLoaded){
+    api('vehiclemodels').then(function(list){
+      vehModelsLoaded = true;
+      window._vehModels = list;
+      document.getElementById('veh-list').innerHTML = list.map(function(v){
+        return '<option value="' + esc(v.name) + '">#' + v.modelId + '</option>';
+      }).join('');
+    }).catch(function(){});
+  }
+}
+
+function resolveId(input, list, nameKey, idKey){
+  var s = input.trim();
+  if(/^\d+$/.test(s)) return parseInt(s);
+  if(!list) return null;
+  var exact = list.filter(function(x){ return x[nameKey].toLowerCase() === s.toLowerCase(); });
+  if(exact.length) return exact[0][idKey];
+  var partial = list.filter(function(x){ return x[nameKey].toLowerCase().indexOf(s.toLowerCase()) !== -1; });
+  return partial.length ? partial[0][idKey] : null;
+}
+
+function giveItem(give){
+  var steamId = document.getElementById('give-player').value;
+  if(!steamId) return toast('Sélectionne un joueur', true);
+  var itemId = resolveId(document.getElementById('item-search').value, window._items, 'name', 'id');
+  if(itemId === null) return toast('Objet introuvable', true);
+  var qty = parseInt(document.getElementById('item-qty').value) || 1;
+  act(give ? 'giveitem' : 'removeitem', {steamId: steamId, itemId: itemId, amount: qty}, give ? 'Objet donné' : 'Objet retiré');
+}
+
+function showInventory(){
+  var steamId = document.getElementById('give-player').value;
+  if(!steamId) return toast('Sélectionne un joueur', true);
+  api('inventory?steamId=' + encodeURIComponent(steamId)).then(function(list){
+    var el = document.getElementById('give-info');
+    if(list.error){ el.textContent = list.error; return; }
+    if(!list.length){ el.textContent = 'Inventaire vide.'; return; }
+    el.innerHTML = '<b>Inventaire :</b> ' + list.map(function(i){ return esc(i.name) + ' ×' + i.number; }).join(' · ');
+  });
+}
+
+function giveVehicle(){
+  var steamId = document.getElementById('give-player').value;
+  if(!steamId) return toast('Sélectionne un joueur', true);
+  var modelId = resolveId(document.getElementById('veh-search').value, window._vehModels, 'name', 'modelId');
+  if(modelId === null) return toast('Véhicule introuvable', true);
+  act('givevehicle', {steamId: steamId, modelId: modelId}, 'Véhicule ajouté au garage');
+}
+
+function showVehicles(){
+  var steamId = document.getElementById('give-player').value;
+  if(!steamId) return toast('Sélectionne un joueur', true);
+  api('vehicles?steamId=' + encodeURIComponent(steamId)).then(function(list){
+    var el = document.getElementById('give-info');
+    if(list.error){ el.textContent = list.error; return; }
+    if(!list.length){ el.textContent = 'Aucun véhicule.'; return; }
+    el.innerHTML = '<b>Garage :</b><br>' + list.map(function(v){
+      var st = v.isStowed ? '<span class="badge">garage</span>' : '<span class="badge" style="color:var(--ok)">sorti</span>';
+      return '#' + v.vehicleId + ' ' + esc(v.name) + ' [' + esc(v.plate) + '] ' + st +
+        ' fuel:' + v.fuel + ' ' +
+        (v.isStowed ? '<button onclick="vehAction(\'vehicleunstow\',' + v.vehicleId + ',\'' + steamId + '\')">Sortir</button>'
+                    : '<button onclick="vehAction(\'vehiclestow\',' + v.vehicleId + ')">Ranger</button>') +
+        ' <button class="danger" onclick="if(confirm(\'Supprimer ce véhicule ?\'))vehAction(\'vehicledelete\',' + v.vehicleId + ')">Suppr</button>';
+    }).join('<br>');
+  });
+}
+
+function vehAction(path, vehicleId, steamId){
+  var body = {vehicleId: vehicleId};
+  if(steamId) body.steamId = steamId;
+  api(path, body).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('OK'); showVehicles(); refresh(); }
+  });
+}
+
 setInterval(function(){
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('fr-FR');
 }, 1000);
 
-if(auth){ hideLogin(); refresh(); } else { showLogin(); }
+if(auth){ hideLogin(); refresh(); loadCatalogs(); } else { showLogin(); }
 setInterval(function(){ if(auth && document.getElementById('login').style.display === 'none') refresh(); }, 5000);
 </script>
 </body>
