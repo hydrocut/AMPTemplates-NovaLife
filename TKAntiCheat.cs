@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.1 — TeamKit.fr
+/// TKAntiCheat v1.2 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -62,7 +62,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.1 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.2 désactivé par config");
             return;
         }
         HookEvents();
@@ -78,7 +78,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.1 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.2 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -93,6 +93,7 @@ public class TKAntiCheat : Plugin
             Nova.server.OnPlayerMoneyEvent += delegate (Player p, double amount, string reason) { OnMoney(p, amount, reason, false); };
             Nova.server.OnPlayerBankEvent += delegate (Player p, double amount, string reason) { OnMoney(p, amount, reason, true); };
             Nova.server.OnPlayerReceiveItemEvent += delegate (Player p, int itemId, int slotId, int number) { OnItem(p, itemId, number); };
+            Nova.server.OnPlayerUseCommandEvent += delegate (Player p, SChatCommand cmd) { OnActivity(p, true); };
             Nova.server.OnPlayerConnectEvent += delegate (Player p) { MarkTeleport(p); };
             Nova.server.OnPlayerSpawnCharacterEvent += delegate (Player p) { MarkTeleport(p); };
             Nova.server.OnPlayerDeathEvent += delegate (Player p) { MarkTeleport(p); };
@@ -102,6 +103,65 @@ public class TKAntiCheat : Plugin
         catch (Exception ex)
         {
             Debug.LogError("[TKAC] Erreur branchement événements : " + ex.Message);
+        }
+    }
+
+    // Chat : le jeu appelle le hook plugin OnPlayerText pour chaque message
+    public override void OnPlayerText(Player player, string message)
+    {
+        base.OnPlayerText(player, message);
+        OnActivity(player, false);
+    }
+
+    // steamId -> timestamps des actions (commandes + chat) sur la fenetre
+    private readonly Dictionary<ulong, List<double>> spamWindows = new Dictionary<ulong, List<double>>();
+    private readonly Dictionary<ulong, double> spamLastAlert = new Dictionary<ulong, double>();
+
+    private void OnActivity(Player p, bool isCommand)
+    {
+        if (p == null || config == null || !config.spamEnabled)
+        {
+            return;
+        }
+        double now = Time.realtimeSinceStartup;
+        ulong id = p.steamId;
+        List<double> list;
+        if (!spamWindows.TryGetValue(id, out list))
+        {
+            list = new List<double>();
+            spamWindows[id] = list;
+        }
+        list.Add(now);
+        double windowStart = now - config.spamWindowSeconds;
+        list.RemoveAll(delegate (double t) { return t < windowStart; });
+
+        if (list.Count <= config.spamThreshold)
+        {
+            return;
+        }
+
+        // au-dela du seuil : alerte (throttlee) + kick
+        double last;
+        spamLastAlert.TryGetValue(id, out last);
+        bool logNow = now - last >= 10;
+        if (logNow)
+        {
+            spamLastAlert[id] = now;
+        }
+        string pseudo = SafePseudo(p);
+        Alert("SPAM", pseudo, id, list.Count + " actions (commandes/chat) en " + config.spamWindowSeconds + "s"
+            + (config.spamKick ? " — kick" : ""));
+
+        if (config.spamKick)
+        {
+            try
+            {
+                p.Disconnect("Anti-spam : trop de commandes/messages en peu de temps");
+            }
+            catch
+            {
+            }
+            spamWindows.Remove(id);
         }
     }
 
@@ -389,6 +449,11 @@ public class TKAntiCheatConfig
     public int checkIntervalSeconds = 1;
     // Nb d'alertes gardées en mémoire/fichier
     public int maxAlerts = 200;
+    // Anti-spam de commandes/chat en jeu
+    public bool spamEnabled = true;
+    public int spamThreshold = 12;      // actions max sur la fenetre avant sanction
+    public int spamWindowSeconds = 5;
+    public bool spamKick = true;        // kick auto le spammeur (choix du user)
     // Raisons de gain d'argent considérées légitimes (sous-chaînes, minuscule)
     public string[] reasonWhitelist = new string[]
     {
@@ -410,6 +475,10 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"itemWindowTotal\": " + c.itemWindowTotal + ",");
         sb.AppendLine("  \"checkIntervalSeconds\": " + c.checkIntervalSeconds + ",");
         sb.AppendLine("  \"maxAlerts\": " + c.maxAlerts + ",");
+        sb.AppendLine("  \"spamEnabled\": " + (c.spamEnabled ? "true" : "false") + ",");
+        sb.AppendLine("  \"spamThreshold\": " + c.spamThreshold + ",");
+        sb.AppendLine("  \"spamWindowSeconds\": " + c.spamWindowSeconds + ",");
+        sb.AppendLine("  \"spamKick\": " + (c.spamKick ? "true" : "false") + ",");
         sb.Append("  \"reasonWhitelist\": [");
         for (int i = 0; i < c.reasonWhitelist.Length; i++)
         {
@@ -440,6 +509,12 @@ public class TKAntiCheatConfig
         c.itemWindowTotal = (int)GetDouble(json, "itemWindowTotal", c.itemWindowTotal);
         c.checkIntervalSeconds = (int)GetDouble(json, "checkIntervalSeconds", c.checkIntervalSeconds);
         c.maxAlerts = (int)GetDouble(json, "maxAlerts", c.maxAlerts);
+        c.spamEnabled = GetBool(json, "spamEnabled", c.spamEnabled);
+        c.spamThreshold = (int)GetDouble(json, "spamThreshold", c.spamThreshold);
+        c.spamWindowSeconds = (int)GetDouble(json, "spamWindowSeconds", c.spamWindowSeconds);
+        c.spamKick = GetBool(json, "spamKick", c.spamKick);
+        if (c.spamThreshold < 5) c.spamThreshold = 5;
+        if (c.spamWindowSeconds < 2) c.spamWindowSeconds = 2;
         Match m = Regex.Match(json, "\"reasonWhitelist\"\\s*:\\s*\\[(?<v>[^\\]]*)\\]");
         if (m.Success)
         {
