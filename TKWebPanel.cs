@@ -18,7 +18,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKWebPanel v1.2 — TeamKit.fr
+/// TKWebPanel v1.4 — TeamKit.fr
 ///
 /// Panel d'administration web embarqué dans le serveur Nova-Life.
 /// Le plugin démarre un serveur HTTP (port configurable, défaut 7791) qui
@@ -56,7 +56,7 @@ public class TKWebPanel : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.2 désactivé par config");
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.4 désactivé par config");
             return;
         }
         try
@@ -74,7 +74,7 @@ public class TKWebPanel : Plugin
             httpThread.IsBackground = true;
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.4 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -223,7 +223,12 @@ public class TKWebPanel : Plugin
             }
             else if (path.StartsWith("/icon/"))
             {
-                ServeIcon(ctx, path);
+                ServeIcon(ctx, path, "icons");
+                return;
+            }
+            else if (path.StartsWith("/vicon/"))
+            {
+                ServeIcon(ctx, path, "vehicons");
                 return;
             }
             else if (path.StartsWith("/api/"))
@@ -271,7 +276,7 @@ public class TKWebPanel : Plugin
     // Sert une icône d'item PNG depuis Plugins/TKWebPanel/icons/{id}.png
     // (icônes extraites du jeu). Cache navigateur 7 jours. Pas d'auth : ce ne
     // sont que des images d'items, et ça permet le cache/preload simple.
-    private void ServeIcon(HttpListenerContext ctx, string path)
+    private void ServeIcon(HttpListenerContext ctx, string path, string folder)
     {
         try
         {
@@ -282,7 +287,7 @@ public class TKWebPanel : Plugin
                 ctx.Response.OutputStream.Close();
                 return;
             }
-            string file = Path.Combine(Path.Combine(pluginDir, "icons"), name);
+            string file = Path.Combine(Path.Combine(pluginDir, folder), name);
             if (!File.Exists(file))
             {
                 ctx.Response.StatusCode = 404;
@@ -371,6 +376,14 @@ public class TKWebPanel : Plugin
                 return ApiBring(body);
             case "/api/accheck":
                 return ApiAntiCheat();
+            case "/api/history":
+                return ApiHistory();
+            case "/api/offlineinv":
+                return ApiOfflineInventory(ctx.Request.QueryString["characterId"]);
+            case "/api/offlineremoveitem":
+                return ApiOfflineRemoveItem(body);
+            case "/api/offlinevehicles":
+                return ApiOfflineVehicles(ctx.Request.QueryString["characterId"]);
             case "/api/floodbans":
                 return ApiFloodBans();
             case "/api/floodunban":
@@ -1285,7 +1298,353 @@ public class TKWebPanel : Plugin
         });
     }
 
-    // Lit les alertes anti-cheat écrites par le plugin TKAntiCheat (fichier partagé)
+    // ------------------------------------------------------------------
+    // Historique de TOUS les joueurs (même hors-ligne) : lecture directe de
+    // life.db en lecture seule via sqlite-net embarqué dans le jeu.
+    // ------------------------------------------------------------------
+    public class HistoryRow
+    {
+        public string SteamId { get; set; }
+        public string Username { get; set; }
+        public int AdminLevel { get; set; }
+        public long BanTimestamp { get; set; }
+        public string BanReason { get; set; }
+        public int BanCount { get; set; }
+        public int KickCount { get; set; }
+        public string Firstname { get; set; }
+        public string Lastname { get; set; }
+        public double Money { get; set; }
+        public double Bank { get; set; }
+        public int CharacterId { get; set; }
+        public string Inventory { get; set; }
+    }
+
+    // L'argent liquide est stocké dans les portefeuilles (items dont data
+    // contient currentMoney) : on le somme depuis le JSON d'inventaire.
+    private static double WalletMoney(string inventoryJson)
+    {
+        if (string.IsNullOrEmpty(inventoryJson))
+        {
+            return 0;
+        }
+        double total = 0;
+        foreach (Match m in Regex.Matches(inventoryJson, "currentMoney\\\\?\"?\\s*:\\s*(?<v>-?\\d+(\\.\\d+)?)"))
+        {
+            double v;
+            if (double.TryParse(m.Groups["v"].Value, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out v))
+            {
+                total += v;
+            }
+        }
+        return total;
+    }
+
+    private string ApiHistory()
+    {
+        string dbPath;
+        try
+        {
+            dbPath = Path.GetFullPath(Path.Combine(pluginDir, "..", "..", "life.db"));
+        }
+        catch
+        {
+            return "{\"error\":\"chemin BDD introuvable\"}";
+        }
+        if (!File.Exists(dbPath))
+        {
+            return "{\"error\":\"life.db introuvable\"}";
+        }
+        HashSet<string> onlineIds = new HashSet<string>();
+        try
+        {
+            if (Nova.server != null)
+            {
+                foreach (Player p in Nova.server.GetAllPlayers())
+                {
+                    if (p != null)
+                    {
+                        onlineIds.Add(p.steamId.ToString());
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(dbPath, SQLite.SQLiteOpenFlags.ReadOnly, false);
+            try
+            {
+                // Un compte peut avoir plusieurs persos : on prend le plus riche.
+                List<HistoryRow> rows = conn.Query<HistoryRow>(
+                    "SELECT a.SteamId AS SteamId, a.Username AS Username, a.AdminLevel AS AdminLevel, " +
+                    "a.BanTimestamp AS BanTimestamp, a.BanReason AS BanReason, a.BanCount AS BanCount, " +
+                    "a.KickCount AS KickCount, c.Firstname AS Firstname, c.Lastname AS Lastname, " +
+                    "c.Money AS Money, c.Bank AS Bank, c.Id AS CharacterId, c.Inventory AS Inventory " +
+                    "FROM Accounts a LEFT JOIN Characters c ON c.AccountId = a.Id " +
+                    "ORDER BY a.Id DESC LIMIT 2000");
+                long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                StringBuilder sb = new StringBuilder();
+                sb.Append("[");
+                bool first = true;
+                foreach (HistoryRow r in rows)
+                {
+                    if (!first) sb.Append(",");
+                    first = false;
+                    bool banned = r.BanTimestamp == -1 || r.BanTimestamp > now;
+                    sb.Append("{\"steamId\":").Append(Json.Str(r.SteamId ?? ""));
+                    sb.Append(",\"username\":").Append(Json.Str(r.Username ?? ""));
+                    sb.Append(",\"firstname\":").Append(Json.Str(r.Firstname ?? ""));
+                    sb.Append(",\"lastname\":").Append(Json.Str(r.Lastname ?? ""));
+                    double cash = r.Money + WalletMoney(r.Inventory);
+                    sb.Append(",\"money\":").Append(cash.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(",\"bank\":").Append(r.Bank.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(",\"characterId\":").Append(r.CharacterId);
+                    sb.Append(",\"adminLevel\":").Append(r.AdminLevel);
+                    sb.Append(",\"banned\":").Append(banned ? "true" : "false");
+                    sb.Append(",\"banReason\":").Append(Json.Str(r.BanReason ?? ""));
+                    sb.Append(",\"bans\":").Append(r.BanCount);
+                    sb.Append(",\"kicks\":").Append(r.KickCount);
+                    sb.Append(",\"online\":").Append(onlineIds.Contains(r.SteamId ?? "") ? "true" : "false");
+                    sb.Append("}");
+                }
+                sb.Append("]");
+                return sb.ToString();
+            }
+            finally
+            {
+                conn.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str("lecture BDD : " + ex.Message) + "}";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Gestion hors-ligne (lecture/écriture directe de life.db)
+    // ------------------------------------------------------------------
+    private string DbPath()
+    {
+        return Path.GetFullPath(Path.Combine(pluginDir, "..", "..", "life.db"));
+    }
+
+    private class CharRow
+    {
+        public int Id { get; set; }
+        public string Inventory { get; set; }
+        public int AccountId { get; set; }
+    }
+
+    // Le perso appartient-il à un joueur actuellement en ligne ?
+    private bool IsCharacterOnline(int characterId)
+    {
+        object result = RunOnMain(delegate
+        {
+            if (Nova.server == null)
+            {
+                return (object)false;
+            }
+            foreach (Player p in Nova.server.GetAllPlayers())
+            {
+                try
+                {
+                    if (p != null && p.character != null && p.character.Id == characterId)
+                    {
+                        return (object)true;
+                    }
+                }
+                catch
+                {
+                }
+            }
+            return (object)false;
+        });
+        return (bool)result;
+    }
+
+    private static List<int[]> ParseInventory(string json)
+    {
+        // [ [itemId, number], ... ] dans l'ordre des slots (slots vides exclus)
+        List<int[]> list = new List<int[]>();
+        if (string.IsNullOrEmpty(json))
+        {
+            return list;
+        }
+        foreach (Match m in Regex.Matches(json, "\\{\\s*\"itemId\"\\s*:\\s*(?<i>\\d+)\\s*,\\s*\"number\"\\s*:\\s*(?<n>\\d+)"))
+        {
+            int id = int.Parse(m.Groups["i"].Value);
+            int n = int.Parse(m.Groups["n"].Value);
+            if (id > 0 && n > 0)
+            {
+                list.Add(new int[] { id, n });
+            }
+        }
+        return list;
+    }
+
+    private string ApiOfflineInventory(string characterIdStr)
+    {
+        int characterId;
+        if (!int.TryParse(characterIdStr ?? "", out characterId) || characterId <= 0)
+        {
+            return "{\"error\":\"characterId invalide\"}";
+        }
+        string inv;
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            List<CharRow> rows = conn.Query<CharRow>("SELECT Id, Inventory FROM Characters WHERE Id = ?", characterId);
+            if (rows.Count == 0)
+            {
+                return "{\"error\":\"personnage introuvable\"}";
+            }
+            inv = rows[0].Inventory;
+        }
+        finally
+        {
+            conn.Close();
+        }
+        // agrège les slots du même item pour l'affichage
+        Dictionary<int, int> totals = new Dictionary<int, int>();
+        foreach (int[] slot in ParseInventory(inv))
+        {
+            int cur;
+            totals.TryGetValue(slot[0], out cur);
+            totals[slot[0]] = cur + slot[1];
+        }
+        object namesJson = RunOnMain(delegate
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append("[");
+            bool first = true;
+            foreach (KeyValuePair<int, int> kv in totals)
+            {
+                string name = "item " + kv.Key;
+                try
+                {
+                    Item it = Nova.man.item.GetItem(kv.Key);
+                    if (it != null)
+                    {
+                        name = ReadableItemName(it);
+                    }
+                }
+                catch
+                {
+                }
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"itemId\":").Append(kv.Key);
+                sb.Append(",\"name\":").Append(Json.Str(name));
+                sb.Append(",\"number\":").Append(kv.Value).Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        });
+        return (string)namesJson;
+    }
+
+    private string ApiOfflineRemoveItem(string body)
+    {
+        int characterId = Json.GetInt(body, "characterId", -1);
+        int itemId = Json.GetInt(body, "itemId", -1);
+        int amount = Json.GetInt(body, "amount", 0);
+        if (characterId <= 0 || itemId <= 0 || amount <= 0)
+        {
+            return "{\"error\":\"paramètres invalides\"}";
+        }
+        if (IsCharacterOnline(characterId))
+        {
+            return "{\"error\":\"ce joueur est en ligne : utilisez son inventaire en ligne\"}";
+        }
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(),
+            SQLite.SQLiteOpenFlags.ReadWrite, false);
+        try
+        {
+            List<CharRow> rows = conn.Query<CharRow>("SELECT Id, Inventory FROM Characters WHERE Id = ?", characterId);
+            if (rows.Count == 0 || string.IsNullOrEmpty(rows[0].Inventory))
+            {
+                return "{\"error\":\"personnage ou inventaire introuvable\"}";
+            }
+            string json = rows[0].Inventory;
+            int remaining = amount;
+            // retire slot par slot ; slot vidé -> itemId 0 (slot libre, format du jeu)
+            string updated = Regex.Replace(json,
+                "\\{\\s*\"itemId\"\\s*:\\s*" + itemId + "\\s*,\\s*\"number\"\\s*:\\s*(?<n>\\d+)\\s*,\\s*\"data\"\\s*:\\s*\"(?<d>(?:\\\\.|[^\"])*)\"\\s*\\}",
+                delegate (Match m)
+                {
+                    if (remaining <= 0)
+                    {
+                        return m.Value;
+                    }
+                    int n = int.Parse(m.Groups["n"].Value);
+                    int take = Math.Min(n, remaining);
+                    remaining -= take;
+                    int left = n - take;
+                    if (left > 0)
+                    {
+                        return "{\"itemId\":" + itemId + ",\"number\":" + left + ",\"data\":\"" + m.Groups["d"].Value + "\"}";
+                    }
+                    return "{\"itemId\":0,\"number\":0,\"data\":\"\"}";
+                });
+            int removed = amount - remaining;
+            if (removed <= 0)
+            {
+                return "{\"error\":\"le personnage n'a pas cet item\"}";
+            }
+            conn.Execute("UPDATE Characters SET Inventory = ? WHERE Id = ?", updated, characterId);
+            Debug.Log("[TKWEB] OFFLINE-REMOVEITEM charId=" + characterId + " item=" + itemId + " x" + removed);
+            return "{\"ok\":true,\"removed\":" + removed + "}";
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    private string ApiOfflineVehicles(string characterIdStr)
+    {
+        int characterId;
+        if (!int.TryParse(characterIdStr ?? "", out characterId) || characterId <= 0)
+        {
+            return "{\"error\":\"characterId invalide\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append("[");
+            bool first = true;
+            foreach (LifeVehicle v in Nova.v.vehicles)
+            {
+                if (v == null || v.permissions == null)
+                {
+                    continue;
+                }
+                bool owns = false;
+                try { owns = v.permissions.HasPermission(characterId); } catch { }
+                if (!owns)
+                {
+                    continue;
+                }
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"vehicleId\":").Append(v.vehicleId);
+                sb.Append(",\"modelId\":").Append(v.modelId);
+                sb.Append(",\"name\":").Append(Json.Str(VehicleModelName(v.modelId)));
+                sb.Append(",\"plate\":").Append(Json.Str(v.plate ?? ""));
+                sb.Append(",\"isStowed\":").Append(v.isStowed ? "true" : "false");
+                sb.Append(",\"fuel\":").Append(v.fuel.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        });
+    }
+
     private string ApiAntiCheat()
     {
         try

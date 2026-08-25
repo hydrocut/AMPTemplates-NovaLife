@@ -235,6 +235,18 @@
     "SkipOnFailure": true
   },
   {
+    "UpdateStageName": "Vignettes de véhicules du panel",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKWebPanel-vehicons.zip",
+    "UpdateSourceArgs": "TKWebPanel-vehicons.zip",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKWebPanel/vehicons/",
+    "UnzipUpdateSource": true,
+    "DeleteAfterExtract": true,
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
+  },
+  {
     "UpdateStageName": "Création du dossier TeamKitIntro",
     "UpdateSourcePlatform": "All",
     "UpdateSource": "CreateDirectory",
