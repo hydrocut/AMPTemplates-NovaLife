@@ -18,7 +18,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKWebPanel v1.6 — TeamKit.fr
+/// TKWebPanel v1.7 — TeamKit.fr
 ///
 /// Panel d'administration web embarqué dans le serveur Nova-Life.
 /// Le plugin démarre un serveur HTTP (port configurable, défaut 7791) qui
@@ -56,7 +56,7 @@ public class TKWebPanel : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.6 désactivé par config");
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.7 désactivé par config");
             return;
         }
         try
@@ -74,7 +74,7 @@ public class TKWebPanel : Plugin
             httpThread.IsBackground = true;
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.6 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.7 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -390,6 +390,10 @@ public class TKWebPanel : Plugin
                 return ApiPlayerAreas(ctx.Request.QueryString["characterId"]);
             case "/api/bizs":
                 return ApiBizs();
+            case "/api/heavyareas":
+                return ApiHeavyAreas();
+            case "/api/ghoststats":
+                return (string)RunOnMain(ApiGhostStats);
             case "/api/floodbans":
                 return ApiFloodBans();
             case "/api/floodunban":
@@ -1886,6 +1890,107 @@ public class TKWebPanel : Plugin
         public int Id { get; set; }
         public string Firstname { get; set; }
         public string Lastname { get; set; }
+    }
+
+    // ------------------------------------------------------------------
+    // Optimisation FPS : état des véhicules fantômes + terrains lourds
+    // ------------------------------------------------------------------
+    private object ApiGhostStats()
+    {
+        int real = 0, ghosts = 0, stowed = 0;
+        try
+        {
+            foreach (LifeVehicle v in Nova.v.vehicles)
+            {
+                if (v == null) continue;
+                if (v.isStowed) stowed++;
+                else if (v.fake != null) ghosts++;
+                else if (v.instance != null) real++;
+            }
+        }
+        catch
+        {
+        }
+        long ghosted = 0;
+        bool pluginLoaded = false;
+        foreach (System.Reflection.Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            Type t = asm.GetType("TKGhost");
+            if (t != null)
+            {
+                pluginLoaded = true;
+                System.Reflection.FieldInfo f = t.GetField("ghostedSinceBoot");
+                if (f != null)
+                {
+                    ghosted = Convert.ToInt64(f.GetValue(null));
+                }
+                break;
+            }
+        }
+        return "{\"pluginLoaded\":" + (pluginLoaded ? "true" : "false")
+            + ",\"real\":" + real + ",\"ghosts\":" + ghosts + ",\"stowed\":" + stowed
+            + ",\"ghostedSinceBoot\":" + ghosted + "}";
+    }
+
+    private class HeavyAreaRow
+    {
+        public int AreaId { get; set; }
+        public int N { get; set; }
+    }
+
+    // Terrains avec le plus d'objets posés = principaux tueurs de FPS client
+    private string ApiHeavyAreas()
+    {
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            List<HeavyAreaRow> rows = conn.Query<HeavyAreaRow>(
+                "SELECT AreaId AS AreaId, COUNT(*) AS N FROM Objects GROUP BY AreaId ORDER BY N DESC LIMIT 30");
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            foreach (HeavyAreaRow r in rows)
+            {
+                string ownerName = "";
+                int maxObjects = 0;
+                List<AreaRow> areas = conn.Query<AreaRow>("SELECT AreaId, Permissions, Price, RentPrice, IsRentable FROM Areas WHERE AreaId = ?", r.AreaId);
+                if (areas.Count > 0)
+                {
+                    Match m = Regex.Match(areas[0].Permissions ?? "", "\"owner\"\\s*:\\s*\\{[^}]*\"characterId\"\\s*:\\s*(?<c>\\d+)");
+                    if (m.Success)
+                    {
+                        int charId = int.Parse(m.Groups["c"].Value);
+                        List<CharRow2> o = conn.Query<CharRow2>("SELECT Id, Firstname, Lastname FROM Characters WHERE Id = ?", charId);
+                        if (o.Count > 0)
+                        {
+                            ownerName = (o[0].Firstname + " " + o[0].Lastname).Trim();
+                        }
+                    }
+                    List<MaxObjRow> mo = conn.Query<MaxObjRow>("SELECT MaxObjects FROM Areas WHERE AreaId = ?", r.AreaId);
+                    if (mo.Count > 0)
+                    {
+                        maxObjects = mo[0].MaxObjects;
+                    }
+                }
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"areaId\":").Append(r.AreaId);
+                sb.Append(",\"objects\":").Append(r.N);
+                sb.Append(",\"maxObjects\":").Append(maxObjects);
+                sb.Append(",\"ownerName\":").Append(Json.Str(ownerName));
+                sb.Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    private class MaxObjRow
+    {
+        public int MaxObjects { get; set; }
     }
 
     private string ApiAntiCheat()

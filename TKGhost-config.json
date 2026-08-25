@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "ghostAfterMinutes": 10,
+  "playerRadiusMeters": 50,
+  "checkIntervalSeconds": 30,
+  "logChanges": true
+}

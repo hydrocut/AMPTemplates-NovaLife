@@ -208,6 +208,21 @@ button.chip img{width:26px;height:26px;object-fit:contain}
   </section>
 
   <section>
+    <h2>Optimisation FPS client (TKGhost)</h2>
+    <div id="ghost-box" class="muted">Chargement…</div>
+    <div class="row" style="margin-top:12px">
+      <button onclick="loadHeavyAreas()">Analyser les terrains les plus lourds</button>
+      <span class="muted">= là où les FPS clients chutent (objets posés par les joueurs)</span>
+    </div>
+    <div class="tblwrap" id="heavy-wrap" style="display:none;margin-top:10px">
+    <table>
+      <thead><tr><th>Terrain</th><th>Objets posés</th><th>Limite (MaxObjects)</th><th>Propriétaire</th></tr></thead>
+      <tbody id="heavyareas"></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section>
     <h2>Anti-cheat — détections (TKAntiCheat)</h2>
     <div class="tblwrap">
     <table>
@@ -340,6 +355,17 @@ function refresh(){
       '</b> &nbsp;·&nbsp; <span class="muted">plage auto ' + f.idleFps + '–' + f.maxFps + ' (base ' + f.minPlayersFps + ')</span>';
   }).catch(function(){});
 
+  api('ghoststats').then(function(g){
+    var el = document.getElementById('ghost-box');
+    if(!g.pluginLoaded){
+      el.innerHTML = '<span class="muted">Plugin TKGhost non chargé (actif au prochain redémarrage)</span> — véhicules sortis : <b>' + g.real + '</b>, fantômes : <b>' + g.ghosts + '</b>, au garage : <b>' + g.stowed + '</b>';
+    } else {
+      el.innerHTML = 'Véhicules dans le monde : <b style="color:var(--warn)">' + g.real + ' réels</b> (coûteux) · ' +
+        '<b style="color:var(--ok)">' + g.ghosts + ' fantômes</b> (allégés) · ' +
+        g.stowed + ' au garage — <b>' + g.ghostedSinceBoot + '</b> convertis depuis le démarrage';
+    }
+  }).catch(function(){});
+
   api('accheck').then(function(list){
     var tb = document.getElementById('accheck');
     if(!list.length){ tb.innerHTML = '<tr><td colspan="6" class="muted">Aucune détection</td></tr>'; return; }
@@ -467,6 +493,24 @@ function checkBan(){
       var until = r.permanent ? 'permanent' : 'jusqu\'au ' + new Date(r.until * 1000).toLocaleString('fr-FR');
       el.textContent = (r.username || id) + ' : BANNI (' + until + ') — raison : ' + (r.reason || 'non précisée');
     }
+  });
+}
+
+function loadHeavyAreas(){
+  api('heavyareas').then(function(list){
+    if(list.error){ toast(list.error, true); return; }
+    document.getElementById('heavy-wrap').style.display = 'block';
+    var tb = document.getElementById('heavyareas');
+    if(!list.length){ tb.innerHTML = '<tr><td colspan="4" class="muted">Aucun objet posé</td></tr>'; return; }
+    tb.innerHTML = list.map(function(a){
+      var ratio = a.maxObjects > 0 ? a.objects / a.maxObjects : 0;
+      var col = a.objects >= 400 ? 'var(--bad)' : (a.objects >= 150 ? 'var(--warn)' : 'var(--text)');
+      return '<tr><td class="mono">#' + a.areaId + '</td>' +
+        '<td><b style="color:' + col + '">' + a.objects + '</b></td>' +
+        '<td>' + (a.maxObjects > 0 ? a.maxObjects : '—') + '</td>' +
+        '<td>' + (a.ownerName ? esc(a.ownerName) : '<span class="muted">—</span>') + '</td></tr>';
+    }).join('');
+    toast(list.length + ' terrain(s) analysés');
   });
 }
 
