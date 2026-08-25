@@ -168,7 +168,7 @@ public class TKWebPanel : Plugin
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
             InitChat();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.0 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)

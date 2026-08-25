@@ -322,7 +322,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
 var auth = localStorage.getItem('tkweb_auth') || '';
 
 function api(path, body){
-  return fetch('/api/' + path, {
+  return fetch('api/' + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {'X-Auth': auth, 'Content-Type': 'application/json'},
     body: body === undefined ? undefined : JSON.stringify(body)
@@ -351,7 +351,7 @@ function hideLogin(){ document.getElementById('login').style.display = 'none'; }
 
 function login(){
   var pw = document.getElementById('pw').value;
-  fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})})
+  fetch('api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})})
     .then(function(r){ return r.json(); })
     .then(function(r){
       if(r.ok){ auth = pw; localStorage.setItem('tkweb_auth', pw); hideLogin(); refresh(); loadCatalogs(); chatPoll(); }
@@ -664,8 +664,8 @@ function invRemovePrompt(steamId, itemId, max){
   invRemove(steamId, itemId, Math.min(parseInt(q) || 1, max));
 }
 
-function icon(id){ return '<img src="/icon/' + id + '.png" class="ico" onerror="this.style.display=\'none\'">'; }
-function vicon(modelId){ return '<img src="/vicon/' + modelId + '.png" class="vico" onerror="this.style.display=\'none\'">'; }
+function icon(id){ return '<img src="icon/' + id + '.png" class="ico" onerror="this.style.display=\'none\'">'; }
+function vicon(modelId){ return '<img src="vicon/' + modelId + '.png" class="vico" onerror="this.style.display=\'none\'">'; }
 
 // --- Grille de sélection d'objets (icônes cliquables) ---
 var selItem = null;
@@ -685,7 +685,7 @@ function renderItemPick(){
   var more = list.length > 96 ? '<span class="muted" style="grid-column:1/-1">… ' + (list.length - 96) + ' autres — affine la recherche</span>' : '';
   grid.innerHTML = (list.slice(0, 96).map(function(it){
     return '<div class="pickcell' + (selItem && selItem.id === it.id ? ' sel' : '') + '" onclick="chooseItem(' + it.id + ')">' +
-      '<img src="/icon/' + it.id + '.png" onerror="this.src=\'data:image/svg+xml,\'" loading="lazy">' +
+      '<img src="icon/' + it.id + '.png" onerror="this.src=\'data:image/svg+xml,\'" loading="lazy">' +
       '<span title="' + esc(it.name) + '">' + esc(it.name) + '</span></div>';
   }).join('') + more) || '<span class="muted">Aucun objet trouvé</span>';
 }
@@ -876,7 +876,7 @@ function renderVehPick(){
   grid.innerHTML = list.map(function(v){
     var sel = selVeh && selVeh.modelId === v.modelId ? ' sel' : '';
     return '<div class="pickcell' + sel + '" onclick="chooseVeh(' + v.modelId + ')" title="' + esc(v.name) + ' (#' + v.modelId + ')">' +
-      '<img src="/vicon/' + v.modelId + '.png" onerror="this.outerHTML=\'<span style=&quot;font-size:26px&quot;>🚗</span>\'">' +
+      '<img src="vicon/' + v.modelId + '.png" onerror="this.outerHTML=\'<span style=&quot;font-size:26px&quot;>🚗</span>\'">' +
       '<span>' + esc(v.name) + '</span></div>';
   }).join('') || '<span class="muted">Aucun véhicule trouvé</span>';
 }
@@ -884,7 +884,7 @@ function chooseVeh(modelId){
   selVeh = window._vehModels.filter(function(v){ return v.modelId === modelId; })[0] || null;
   if(selVeh){
     document.getElementById('veh-chip').innerHTML =
-      '<img src="/vicon/' + selVeh.modelId + '.png" onerror="this.outerHTML=\'🚗 \'"> <b>' + esc(selVeh.name) + '</b> <span class="muted">#' + selVeh.modelId + '</span>';
+      '<img src="vicon/' + selVeh.modelId + '.png" onerror="this.outerHTML=\'🚗 \'"> <b>' + esc(selVeh.name) + '</b> <span class="muted">#' + selVeh.modelId + '</span>';
   }
   closeModal();
 }
