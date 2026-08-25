@@ -104,6 +104,124 @@ public class TKWebPanel : Plugin
         }
     }
 
+    // ------------------------------------------------------------------
+    // Journal d'activité : PvP, drogue, commandes (v2.2)
+    // ------------------------------------------------------------------
+    private static readonly object actLock = new object();
+    private static readonly List<string> actRing = new List<string>();
+    private static long actLastId;
+    private static string actDir;
+
+    private static void RecordActivity(string kind, string pseudo, string steamId, string detail)
+    {
+        string time = DateTime.Now.ToString("HH:mm:ss");
+        lock (actLock)
+        {
+            actLastId++;
+            actRing.Add("{\"id\":" + actLastId + ",\"time\":" + Json.Str(time)
+                + ",\"kind\":" + Json.Str(kind) + ",\"pseudo\":" + Json.Str(pseudo)
+                + ",\"steamId\":\"" + steamId + "\",\"detail\":" + Json.Str(detail) + "}");
+            while (actRing.Count > 400)
+            {
+                actRing.RemoveAt(0);
+            }
+        }
+        try
+        {
+            if (actDir != null)
+            {
+                File.AppendAllText(Path.Combine(actDir, "activity-" + DateTime.Now.ToString("yyyy-MM-dd") + ".log"),
+                    "[" + time + "] " + kind + " — " + pseudo + " (" + steamId + ") : "
+                    + detail.Replace("\r", " ").Replace("\n", " ") + Environment.NewLine);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static string PseudoOf(Player p)
+    {
+        try
+        {
+            if (p == null) return "?";
+            if (!string.IsNullOrEmpty(p.steamUsername)) return p.steamUsername;
+            if (p.character != null) return (p.character.Firstname + " " + p.character.Lastname).Trim();
+        }
+        catch
+        {
+        }
+        return "?";
+    }
+
+    private void InitActivity()
+    {
+        try
+        {
+            actDir = Path.Combine(pluginDir, "logs");
+            if (!Directory.Exists(actDir))
+            {
+                Directory.CreateDirectory(actDir);
+            }
+            if (Nova.server == null)
+            {
+                return;
+            }
+            Nova.server.OnPlayerKillPlayerEvent += delegate (Player killer, Player victim)
+            {
+                try
+                {
+                    RecordActivity("KILL", PseudoOf(killer), killer != null ? killer.steamId.ToString() : "",
+                        "tue " + PseudoOf(victim) + (victim != null ? " (" + victim.steamId + ")" : ""));
+                }
+                catch { }
+            };
+            Nova.server.OnPlayerDamagePlayerEvent += delegate (Player attacker, Player victim, int dmg)
+            {
+                try
+                {
+                    if (dmg >= 20) // ignore les petits coups pour ne pas noyer le journal
+                    {
+                        RecordActivity("DEGATS", PseudoOf(attacker), attacker != null ? attacker.steamId.ToString() : "",
+                            "-" + dmg + " PV sur " + PseudoOf(victim));
+                    }
+                }
+                catch { }
+            };
+            Nova.server.OnPlayerSellDrugsEvent += delegate (Player p, int a, int b)
+            {
+                try
+                {
+                    RecordActivity("DROGUE", PseudoOf(p), p != null ? p.steamId.ToString() : "",
+                        "vente de drogue (montant " + a + ", qté " + b + ")");
+                }
+                catch { }
+            };
+            Nova.server.OnPlayerConsumeDrugEvent += delegate (Player p)
+            {
+                try
+                {
+                    RecordActivity("DROGUE", PseudoOf(p), p != null ? p.steamId.ToString() : "", "consomme de la drogue");
+                }
+                catch { }
+            };
+            Nova.server.OnPlayerUseCommandEvent += delegate (Player p, SChatCommand cmd)
+            {
+                try
+                {
+                    RecordActivity("COMMANDE", PseudoOf(p), p != null ? p.steamId.ToString() : "",
+                        "/" + (cmd != null ? cmd.fullCommandName : "?"));
+                }
+                catch { }
+            };
+            Debug.Log("[TKWEB] Journal d'activité branché (kills, dégâts, drogue, commandes)");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKWEB] Erreur init journal d'activité : " + ex.Message);
+        }
+    }
+
     private void InitChat()
     {
         try
@@ -168,7 +286,8 @@ public class TKWebPanel : Plugin
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
             InitChat();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.1 initialisé — panel sur le port " + port);
+            InitActivity();
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.2 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -502,6 +621,16 @@ public class TKWebPanel : Plugin
                 return ApiPrison(body);
             case "/api/givexp":
                 return ApiGiveXp(body);
+            case "/api/activity":
+                return ApiActivity(ctx.Request.QueryString["after"], ctx.Request.QueryString["kind"]);
+            case "/api/activityhistory":
+                return ApiActivityHistory(ctx.Request.QueryString["date"]);
+            case "/api/msgadmins":
+                return ApiMsgAdmins(body);
+            case "/api/localmsg":
+                return ApiLocalMsg(body);
+            case "/api/permis":
+                return ApiPermis(body);
             case "/api/ghoststats":
                 return (string)RunOnMain(ApiGhostStats);
             case "/api/floodbans":
@@ -2371,6 +2500,154 @@ public class TKWebPanel : Plugin
             p.GiveXP(amount);
             p.Notify("Expérience", "+" + amount + " XP (staff)");
             Debug.Log("[TKWEB] GIVEXP steamid=" + steamId + " +" + amount);
+            return "{\"ok\":true}";
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Journal d'activité + messages ciblés + permis (v2.2)
+    // ------------------------------------------------------------------
+    private string ApiActivity(string afterStr, string kind)
+    {
+        long after = 0;
+        long.TryParse(afterStr ?? "0", out after);
+        StringBuilder sb = new StringBuilder();
+        lock (actLock)
+        {
+            sb.Append("{\"last\":").Append(actLastId).Append(",\"messages\":[");
+            bool first = true;
+            foreach (string entry in actRing)
+            {
+                Match m = Regex.Match(entry, "\"id\":(?<i>\\d+)");
+                if (m.Success && long.Parse(m.Groups["i"].Value) <= after)
+                {
+                    continue;
+                }
+                if (!string.IsNullOrEmpty(kind) && !entry.Contains("\"kind\":\"" + kind + "\""))
+                {
+                    continue;
+                }
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append(entry);
+            }
+            sb.Append("]}");
+        }
+        return sb.ToString();
+    }
+
+    private string ApiActivityHistory(string date)
+    {
+        if (string.IsNullOrEmpty(date) || !Regex.IsMatch(date, @"^\d{4}-\d{2}-\d{2}$"))
+        {
+            StringBuilder days = new StringBuilder("[");
+            try
+            {
+                bool first = true;
+                List<string> files = new List<string>(Directory.GetFiles(actDir, "activity-*.log"));
+                files.Sort();
+                files.Reverse();
+                foreach (string f in files)
+                {
+                    Match m = Regex.Match(Path.GetFileName(f), @"^activity-(\d{4}-\d{2}-\d{2})\.log$");
+                    if (!m.Success) continue;
+                    if (!first) days.Append(",");
+                    first = false;
+                    days.Append(Json.Str(m.Groups[1].Value));
+                }
+            }
+            catch
+            {
+            }
+            days.Append("]");
+            return "{\"days\":" + days + "}";
+        }
+        try
+        {
+            string file = Path.Combine(actDir, "activity-" + date + ".log");
+            if (!File.Exists(file))
+            {
+                return "{\"error\":\"aucune activité ce jour-là\"}";
+            }
+            string[] lines = File.ReadAllLines(file);
+            StringBuilder sb = new StringBuilder("{\"lines\":[");
+            int start = Math.Max(0, lines.Length - 1500);
+            for (int i = start; i < lines.Length; i++)
+            {
+                if (i > start) sb.Append(",");
+                sb.Append(Json.Str(lines[i]));
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    private string ApiMsgAdmins(string body)
+    {
+        string text = Json.GetString(body, "text", "");
+        if (string.IsNullOrEmpty(text))
+        {
+            return "{\"error\":\"message vide\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            if (Nova.server == null)
+            {
+                return "{\"error\":\"serveur indisponible\"}";
+            }
+            Nova.server.SendMessageToAdmins("<color=#ffb454>[STAFF→ADMINS]</color> " + text);
+            RecordActivity("STAFF", "[PANEL]", "", "message aux admins : " + text);
+            return "{\"ok\":true}";
+        });
+    }
+
+    private string ApiLocalMsg(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        string text = Json.GetString(body, "text", "");
+        double range = Json.GetDouble(body, "range", 60);
+        if (string.IsNullOrEmpty(text))
+        {
+            return "{\"error\":\"message vide\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.setup == null)
+            {
+                return "{\"error\":\"joueur introuvable ou pas en jeu\"}";
+            }
+            Vector3 pos = p.setup.transform.position;
+            Nova.server.SendLocalText("<color=#00f0ff>[LOCAL]</color> " + text, (float)range, pos);
+            RecordActivity("STAFF", "[PANEL]", "", "message local (" + (int)range + " m autour de " + PseudoOf(p) + ") : " + text);
+            return "{\"ok\":true}";
+        });
+    }
+
+    private string ApiPermis(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        int points = Json.GetInt(body, "points", -1);
+        if (points < 0 || points > 12)
+        {
+            return "{\"error\":\"points invalides (0-12)\"}";
+        }
+        return (string)RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.character == null)
+            {
+                return "{\"error\":\"joueur introuvable ou personnage non chargé\"}";
+            }
+            p.character.PermisPoints = points;
+            LifeDB.SaveCharacter(p.character);
+            p.Notify("Permis", "Vos points de permis : " + points + "/12");
+            RecordActivity("STAFF", "[PANEL]", "", "points de permis de " + PseudoOf(p) + " fixés à " + points);
+            Debug.Log("[TKWEB] PERMIS steamid=" + steamId + " points=" + points);
             return "{\"ok\":true}";
         });
     }

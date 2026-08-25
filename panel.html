@@ -29,6 +29,13 @@ footer .don:hover{color:#ff8fa0}
 .chatmsg .t{color:var(--muted);font-size:11px;font-family:ui-monospace,Consolas,monospace}
 .chatmsg .p{color:var(--accent);font-weight:600;cursor:pointer}
 .chatmsg .staff{color:var(--warn);font-weight:700}
+#act-box{height:340px;overflow-y:auto;background:#0b0f18;border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12px}
+.actmsg{margin-bottom:4px;line-height:1.45}
+.actmsg .t{color:var(--muted);font-size:11px;font-family:ui-monospace,Consolas,monospace}
+.actmsg .k{display:inline-block;min-width:74px;text-align:center;border-radius:5px;padding:0 6px;font-size:10px;font-weight:700;background:#232c40;color:var(--muted)}
+.actmsg .k.KILL{color:var(--bad)}.actmsg .k.DEGATS{color:#ff9d5d}.actmsg .k.DROGUE{color:#7ee787}.actmsg .k.COMMANDE{color:var(--accent)}.actmsg .k.STAFF{color:var(--warn)}
+button.actk{padding:4px 10px;font-size:12px}
+button.actk.active{border-color:var(--accent);color:var(--accent)}
 header .right{margin-left:auto;display:flex;gap:10px;align-items:center}
 main{max-width:1180px;margin:0 auto;padding:20px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
@@ -156,7 +163,8 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     <h2>Annonce serveur</h2>
     <div class="row">
       <input id="announce" style="flex:1;min-width:240px" placeholder="Message visible par tous les joueurs" onkeydown="if(event.key==='Enter')sendAnnounce()">
-      <button class="primary" onclick="sendAnnounce()">Envoyer l'annonce</button>
+      <button class="primary" onclick="sendAnnounce()">Envoyer à tous</button>
+      <button onclick="sendToAdmins()">Aux admins seulement</button>
     </div>
   </section>
 
@@ -257,6 +265,20 @@ button.chip img{width:26px;height:26px;object-fit:contain}
       <tbody id="heavyareas"></tbody>
     </table>
     </div>
+  </section>
+
+  <section data-tab="securite">
+    <h2>Journal d'activité <span class="muted" style="font-weight:400;font-size:12px">— kills, dégâts, drogue, commandes · conservé par jour</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="actk active" data-actk="" onclick="actKind('')">Tout</button>
+      <button class="actk" data-actk="KILL" onclick="actKind('KILL')">⚔ Kills</button>
+      <button class="actk" data-actk="DEGATS" onclick="actKind('DEGATS')">🩸 Dégâts</button>
+      <button class="actk" data-actk="DROGUE" onclick="actKind('DROGUE')">🌿 Drogue</button>
+      <button class="actk" data-actk="COMMANDE" onclick="actKind('COMMANDE')">⌨ Commandes</button>
+      <button class="actk" data-actk="STAFF" onclick="actKind('STAFF')">⭐ Staff</button>
+      <select id="act-days" onchange="actLoadDay()" style="margin-left:auto"><option value="">Aujourd'hui (direct)</option></select>
+    </div>
+    <div id="act-box"><p class="muted">Chargement…</p></div>
   </section>
 
   <section data-tab="securite">
@@ -812,6 +834,84 @@ function admSet(steamId, level, pin){
   });
 }
 
+
+// --- Journal d'activite ---
+var actLast = 0, actFilter = '', actDaysLoaded = false;
+function actKind(k){
+  actFilter = k;
+  document.querySelectorAll('button.actk').forEach(function(b){
+    b.className = 'actk' + (b.getAttribute('data-actk') === k ? ' active' : '');
+  });
+  actLast = 0;
+  document.getElementById('act-box').innerHTML = '';
+  actPoll();
+}
+function actPoll(){
+  if(document.getElementById('act-days').value !== '') return;
+  api('activity?after=' + actLast + (actFilter ? '&kind=' + actFilter : '')).then(function(r){
+    if(r.error) return;
+    var box = document.getElementById('act-box');
+    if(r.messages && r.messages.length){
+      if(actLast === 0) box.innerHTML = '';
+      var nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+      r.messages.forEach(function(m){
+        var d = document.createElement('div');
+        d.className = 'actmsg';
+        d.innerHTML = '<span class="t">' + esc(m.time) + '</span> <span class="k ' + esc(m.kind) + '">' + esc(m.kind) + '</span> ' +
+          '<b>' + esc(m.pseudo) + '</b> ' + esc(m.detail);
+        box.appendChild(d);
+      });
+      while(box.children.length > 500) box.removeChild(box.firstChild);
+      actLast = r.last;
+      if(nearBottom) box.scrollTop = box.scrollHeight;
+    } else if(actLast === 0 && box.children.length === 0){
+      box.innerHTML = '<p class="muted">Aucune activité pour l\'instant.</p>';
+      actLast = r.last || 0;
+    }
+  }).catch(function(){});
+  if(!actDaysLoaded){
+    actDaysLoaded = true;
+    api('activityhistory').then(function(r){
+      if(!r.days) return;
+      var sel = document.getElementById('act-days');
+      r.days.forEach(function(d){
+        var o = document.createElement('option');
+        o.value = d; o.textContent = d;
+        sel.appendChild(o);
+      });
+    }).catch(function(){});
+  }
+}
+function actLoadDay(){
+  var day = document.getElementById('act-days').value;
+  var box = document.getElementById('act-box');
+  if(day === ''){ box.innerHTML = ''; actLast = 0; actPoll(); return; }
+  api('activityhistory?date=' + day).then(function(r){
+    if(r.error){ box.innerHTML = '<p class="muted">' + esc(r.error) + '</p>'; return; }
+    box.innerHTML = r.lines.map(function(l){ return '<div class="actmsg">' + esc(l) + '</div>'; }).join('');
+    box.scrollTop = box.scrollHeight;
+  });
+}
+
+// --- Message aux admins ---
+function sendToAdmins(){
+  var el = document.getElementById('announce');
+  if(!el.value) return toast('Message vide', true);
+  api('msgadmins', {text: el.value}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Envoy\u00e9 aux admins en ligne'); el.value = ''; }
+  });
+}
+function localMsgPlayer(id){
+  var x = prompt('Message local (visible ~60 m autour du joueur) :');
+  if(!x) return;
+  act('localmsg', {steamId: id, text: x, range: 60}, 'Message local envoy\u00e9');
+}
+function permisPlayer(id){
+  var n = prompt('Points de permis (0-12) :', '12');
+  if(n === null) return;
+  act('permis', {steamId: id, points: parseInt(n)}, 'Points de permis appliqu\u00e9s');
+}
+
 // --- Actions bonus joueur (+) ---
 function morePlayer(id){
   var pl = playersCache.filter(function(p){ return p.steamId === id; })[0];
@@ -820,6 +920,8 @@ function morePlayer(id){
     '<button onclick="closeModal();notifyPlayer(\'' + id + '\')">📢 Notification à l\'écran</button>' +
     '<button onclick="closeModal();xpPlayer(\'' + id + '\')">✨ Donner de l\'XP</button>' +
     '<button onclick="closeModal();prisonPlayer(\'' + id + '\')">⚖️ Prison / libérer</button>' +
+    '<button onclick="closeModal();permisPlayer(\'' + id + '\')">🪪 Points de permis</button>' +
+    '<button onclick="closeModal();localMsgPlayer(\'' + id + '\')">📍 Message local (autour de lui)</button>' +
     '<button onclick="closeModal()" style="margin-top:8px;text-align:center">Annuler</button>');
 }
 function notifyPlayer(id){
@@ -1111,8 +1213,8 @@ setInterval(function(){
 }, 1000);
 
 showTab(localStorage.getItem('tkweb_tab') || 'dashboard');
-if(auth){ hideLogin(); refresh(); loadCatalogs(); chatPoll(); } else { showLogin(); }
-setInterval(function(){ if(auth && document.getElementById('login').style.display === 'none'){ refresh(); chatPoll(); } }, 5000);
+if(auth){ hideLogin(); refresh(); loadCatalogs(); chatPoll(); actPoll(); } else { showLogin(); }
+setInterval(function(){ if(auth && document.getElementById('login').style.display === 'none'){ refresh(); chatPoll(); actPoll(); } }, 5000);
 </script>
 </body>
 </html>
