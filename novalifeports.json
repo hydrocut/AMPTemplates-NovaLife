@@ -1,10 +1,10 @@
 [
   {
-    "Protocol": "UDP",
+    "Protocol": "TCP",
     "Port": 7787,
     "Ref": "ServerPort",
     "Name": "Game Port",
-    "Description": "Port principal Nova-Life. Correspond à serverPort dans server.json."
+    "Description": "Port principal Nova-Life (Telepathy = TCP). Correspond à serverPort dans server.json."
   },
   {
     "Protocol": "UDP",
