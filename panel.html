@@ -56,7 +56,9 @@ td.actions{max-width:none;overflow:visible}
 ::-webkit-scrollbar-thumb:hover{background:#3d4a66}
 ::-webkit-scrollbar-corner{background:transparent}
 html{scrollbar-width:thin;scrollbar-color:#2a3245 transparent}
-th{color:var(--muted);font-weight:600;font-size:12px}
+th{color:var(--muted);font-weight:600;font-size:12px;cursor:pointer;user-select:none}
+th:hover{color:var(--text)}
+th .sortarrow{color:var(--accent);font-size:10px;margin-left:4px}
 tr:hover td{background:#1b2232}
 .tblwrap{overflow-x:auto}
 button{background:#232c40;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}
@@ -771,6 +773,71 @@ function chooseItem(id){
   closeModal();
 }
 
+
+// --- Tri des tableaux (clic sur les en-tetes) ---
+var sortStates = new WeakMap();
+var sortingNow = false;
+function cellSortValue(td){
+  var v = (td.textContent || '').trim();
+  var cleaned = v.replace(/[\s  €%#]/g, '');
+  if(/^-?\d+([.,]\d+)?$/.test(cleaned)){ return parseFloat(cleaned.replace(',', '.')); }
+  return v.toLowerCase();
+}
+function applySort(tbody){
+  var st = sortStates.get(tbody);
+  if(!st) return;
+  var rows = Array.prototype.slice.call(tbody.rows).filter(function(r){
+    return !(r.cells.length === 1 && r.cells[0].colSpan > 1);
+  });
+  if(rows.length < 2) return;
+  rows.sort(function(a, b){
+    var va = a.cells[st.col] ? cellSortValue(a.cells[st.col]) : '';
+    var vb = b.cells[st.col] ? cellSortValue(b.cells[st.col]) : '';
+    var na = typeof va === 'number', nb = typeof vb === 'number';
+    var r;
+    if(na && nb) r = va - vb;
+    else if(na) r = -1;
+    else if(nb) r = 1;
+    else r = String(va).localeCompare(String(vb), 'fr');
+    return st.dir === 'desc' ? -r : r;
+  });
+  sortingNow = true;
+  rows.forEach(function(r){ tbody.appendChild(r); });
+  sortingNow = false;
+  // fleche sur l'en-tete actif
+  var table = tbody.closest('table');
+  if(table && table.tHead){
+    table.tHead.querySelectorAll('.sortarrow').forEach(function(x){ x.remove(); });
+    var ths = table.tHead.rows[0] ? table.tHead.rows[0].cells : [];
+    if(ths[st.col]){
+      var sp = document.createElement('span');
+      sp.className = 'sortarrow';
+      sp.textContent = st.dir === 'desc' ? '▼' : '▲';
+      ths[st.col].appendChild(sp);
+    }
+  }
+}
+document.addEventListener('click', function(e){
+  var th = e.target.closest('th');
+  if(!th) return;
+  var table = th.closest('table');
+  var tbody = table ? table.querySelector('tbody') : null;
+  if(!tbody) return;
+  var col = Array.prototype.indexOf.call(th.parentNode.cells, th);
+  var st = sortStates.get(tbody);
+  if(st && st.col === col){ st.dir = st.dir === 'asc' ? 'desc' : 'asc'; }
+  else { st = {col: col, dir: 'desc'}; }
+  sortStates.set(tbody, st);
+  applySort(tbody);
+});
+new MutationObserver(function(muts){
+  if(sortingNow) return;
+  muts.forEach(function(m){
+    if(m.target && m.target.tagName === 'TBODY' && sortStates.get(m.target)){
+      applySort(m.target);
+    }
+  });
+}).observe(document.body, {childList: true, subtree: true});
 
 // --- Onglets ---
 

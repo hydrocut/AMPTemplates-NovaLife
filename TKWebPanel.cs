@@ -326,7 +326,7 @@ public class TKWebPanel : Plugin
             InitActivity();
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.5 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.6 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
