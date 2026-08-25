@@ -111,6 +111,9 @@ button.chip img{width:26px;height:26px;object-fit:contain}
 
   <section>
     <h2>Joueurs en ligne</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input id="players-filter" placeholder="Filtrer (pseudo, perso, steamid)…" style="flex:1;min-width:200px" oninput="renderPlayers()">
+    </div>
     <div class="tblwrap">
     <table>
       <thead><tr><th>Pseudo</th><th>Personnage</th><th>SteamID</th><th>Vie</th><th>Espèces</th><th>Banque</th><th>Position</th><th>Actions</th></tr></thead>
@@ -186,23 +189,27 @@ button.chip img{width:26px;height:26px;object-fit:contain}
   <section>
     <h2>Historique joueurs (tous les comptes, même hors ligne)</h2>
     <div class="row" style="margin-bottom:10px">
-      <button class="primary" onclick="loadHistory()">Charger / actualiser</button>
       <input id="hist-filter" placeholder="Filtrer (pseudo, perso, steamid)…" style="flex:1;min-width:200px" oninput="renderHistory()">
+      <span class="muted">actualisé automatiquement toutes les 30 s</span>
     </div>
     <div class="tblwrap">
     <table>
       <thead><tr><th></th><th>Compte Steam</th><th>Personnage</th><th>SteamID</th><th>Espèces</th><th>Banque</th><th>Kicks</th><th>Bans</th><th>Statut</th><th>Actions</th></tr></thead>
-      <tbody id="history"><tr><td colspan="10" class="muted">Clique « Charger » pour lister tous les comptes</td></tr></tbody>
+      <tbody id="history"><tr><td colspan="10" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
   </section>
 
   <section>
-    <h2>Entreprises <button onclick="loadBizs()" style="margin-left:10px">Charger / actualiser</button></h2>
+    <h2>Entreprises</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input id="bizs-filter" placeholder="Filtrer (nom, propriétaire)…" style="flex:1;min-width:200px" oninput="renderBizs()">
+      <span class="muted">actualisé automatiquement toutes les 30 s</span>
+    </div>
     <div class="tblwrap">
     <table>
       <thead><tr><th>#</th><th>Nom</th><th>Propriétaire</th><th>Banque</th><th>Salaire</th><th>Terrain</th><th>Recrutement</th></tr></thead>
-      <tbody id="bizs"><tr><td colspan="7" class="muted">Clique « Charger »</td></tr></tbody>
+      <tbody id="bizs"><tr><td colspan="7" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
   </section>
@@ -303,6 +310,41 @@ function hpColor(h){ return h > 60 ? 'var(--ok)' : (h > 25 ? 'var(--warn)' : 'va
 
 var playersCache = [];
 
+var refreshTick = 0;
+
+function renderPlayers(){
+  var tb = document.getElementById('players');
+  var q = (document.getElementById('players-filter').value || '').trim().toLowerCase();
+  var list = playersCache.filter(function(p){
+    return !q || (p.pseudo||'').toLowerCase().indexOf(q) !== -1 ||
+      ((p.firstname||'') + ' ' + (p.lastname||'')).toLowerCase().indexOf(q) !== -1 ||
+      String(p.steamId).indexOf(q) !== -1;
+  });
+  if(playersCache.length === 0){ tb.innerHTML = '<tr><td colspan="8" class="muted">Aucun joueur en ligne</td></tr>'; return; }
+  if(list.length === 0){ tb.innerHTML = '<tr><td colspan="8" class="muted">Aucun joueur ne correspond au filtre</td></tr>'; return; }
+  tb.innerHTML = list.map(function(p){
+    var perso = p.firstname ? esc(p.firstname + ' ' + p.lastname) : '<span class="muted">chargement…</span>';
+    var admin = p.adminLevel > 0 ? ' <span class="badge admin">admin ' + p.adminLevel + '</span>' : '';
+    var pos = p.inGame ? p.x + ', ' + p.y + ', ' + p.z : '—';
+    return '<tr>' +
+      '<td>' + esc(p.pseudo) + admin + '</td>' +
+      '<td>' + perso + '</td>' +
+      '<td class="mono">' + p.steamId + '</td>' +
+      '<td><span class="hp" style="background:' + hpColor(p.health) + '22;color:' + hpColor(p.health) + '">' + p.health + '</span></td>' +
+      '<td>' + fmtMoney(p.money) + '</td>' +
+      '<td>' + fmtMoney(p.bank) + '</td>' +
+      '<td class="mono muted">' + pos + '</td>' +
+      '<td class="actions">' +
+        '<button onclick="msgPlayer(\'' + p.steamId + '\')" title="Message privé">MSG</button>' +
+        '<button onclick="moneyPlayer(\'' + p.steamId + '\')" title="Espèces / banque">€</button>' +
+        '<button onclick="healPlayer(\'' + p.steamId + '\')" title="Soigner">Soin</button>' +
+        '<button onclick="tpPlayer(\'' + p.steamId + '\')" title="Téléporter">TP</button>' +
+        '<button class="danger" onclick="kickPlayer(\'' + p.steamId + '\')">Kick</button>' +
+        '<button class="danger" onclick="banPlayer(\'' + p.steamId + '\')">Ban</button>' +
+      '</td></tr>';
+  }).join('');
+}
+
 function refresh(){
   api('status').then(function(s){
     document.getElementById('srvname').textContent = s.serverName;
@@ -314,30 +356,13 @@ function refresh(){
 
   api('players').then(function(list){
     playersCache = list;
-    var tb = document.getElementById('players');
-    if(list.length === 0){ tb.innerHTML = '<tr><td colspan="8" class="muted">Aucun joueur en ligne</td></tr>'; return; }
-    tb.innerHTML = list.map(function(p){
-      var perso = p.firstname ? esc(p.firstname + ' ' + p.lastname) : '<span class="muted">chargement…</span>';
-      var admin = p.adminLevel > 0 ? ' <span class="badge admin">admin ' + p.adminLevel + '</span>' : '';
-      var pos = p.inGame ? p.x + ', ' + p.y + ', ' + p.z : '—';
-      return '<tr>' +
-        '<td>' + esc(p.pseudo) + admin + '</td>' +
-        '<td>' + perso + '</td>' +
-        '<td class="mono">' + p.steamId + '</td>' +
-        '<td><span class="hp" style="background:' + hpColor(p.health) + '22;color:' + hpColor(p.health) + '">' + p.health + '</span></td>' +
-        '<td>' + fmtMoney(p.money) + '</td>' +
-        '<td>' + fmtMoney(p.bank) + '</td>' +
-        '<td class="mono muted">' + pos + '</td>' +
-        '<td class="actions">' +
-          '<button onclick="msgPlayer(\'' + p.steamId + '\')" title="Message privé">MSG</button>' +
-          '<button onclick="moneyPlayer(\'' + p.steamId + '\')" title="Espèces / banque">€</button>' +
-          '<button onclick="healPlayer(\'' + p.steamId + '\')" title="Soigner">Soin</button>' +
-          '<button onclick="tpPlayer(\'' + p.steamId + '\')" title="Téléporter">TP</button>' +
-          '<button class="danger" onclick="kickPlayer(\'' + p.steamId + '\')">Kick</button>' +
-          '<button class="danger" onclick="banPlayer(\'' + p.steamId + '\')">Ban</button>' +
-        '</td></tr>';
-    }).join('');
+    renderPlayers();
   }).catch(function(){});
+
+  refreshTick++;
+  if(refreshTick % 6 === 1){ loadHistory(true); loadBizs(true); }
+
+
 
   // remplit le sélecteur de joueur (give)
   var sel = document.getElementById('give-player');
@@ -701,13 +726,13 @@ function vehAction(path, vehicleId, steamId){
 
 // --- Historique de tous les comptes (BDD) ---
 var historyCache = [];
-function loadHistory(){
+function loadHistory(quiet){
   api('history').then(function(list){
-    if(list.error){ toast(list.error, true); return; }
+    if(list.error){ if(!quiet) toast(list.error, true); return; }
     historyCache = list;
     renderHistory();
-    toast(list.length + ' compte(s) chargé(s)');
-  });
+    if(quiet !== true) toast(list.length + ' compte(s) chargé(s)');
+  }).catch(function(){});
 }
 function renderHistory(){
   var tb = document.getElementById('history');
@@ -833,19 +858,29 @@ function playerAreas(characterId, username){
     openModal('<h3>Terrains de ' + esc(username) + '</h3>' + body, true);
   });
 }
-function loadBizs(){
+var bizsCache = [];
+function loadBizs(quiet){
   api('bizs').then(function(list){
-    if(list.error){ toast(list.error, true); return; }
-    var tb = document.getElementById('bizs');
-    if(!list.length){ tb.innerHTML = '<tr><td colspan="7" class="muted">Aucune entreprise</td></tr>'; return; }
-    tb.innerHTML = list.map(function(b){
-      return '<tr><td class="mono muted">' + b.id + '</td><td><b>' + esc(b.name) + '</b></td>' +
-        '<td>' + esc(b.ownerName || '#' + b.ownerId) + '</td>' +
-        '<td>' + fmtMoney(b.bank) + '</td><td>' + fmtMoney(b.salaire) + '</td>' +
-        '<td class="mono">#' + b.terrainId + '</td>' +
-        '<td>' + (b.recruiting ? '<span class="badge" style="color:var(--ok)">recrute</span>' : '<span class="badge">fermé</span>') + '</td></tr>';
-    }).join('');
+    if(list.error){ if(quiet !== true) toast(list.error, true); return; }
+    bizsCache = list;
+    renderBizs();
+  }).catch(function(){});
+}
+function renderBizs(){
+  var tb = document.getElementById('bizs');
+  var q = (document.getElementById('bizs-filter').value || '').trim().toLowerCase();
+  var list = bizsCache.filter(function(b){
+    return !q || (b.name||'').toLowerCase().indexOf(q) !== -1 || (b.ownerName||'').toLowerCase().indexOf(q) !== -1;
   });
+  if(bizsCache.length === 0){ tb.innerHTML = '<tr><td colspan="7" class="muted">Aucune entreprise</td></tr>'; return; }
+  if(list.length === 0){ tb.innerHTML = '<tr><td colspan="7" class="muted">Aucune entreprise ne correspond au filtre</td></tr>'; return; }
+  tb.innerHTML = list.map(function(b){
+    return '<tr><td class="mono muted">' + b.id + '</td><td><b>' + esc(b.name) + '</b></td>' +
+      '<td>' + esc(b.ownerName || '#' + b.ownerId) + '</td>' +
+      '<td>' + fmtMoney(b.bank) + '</td><td>' + fmtMoney(b.salaire) + '</td>' +
+      '<td class="mono">#' + b.terrainId + '</td>' +
+      '<td>' + (b.recruiting ? '<span class="badge" style="color:var(--ok)">recrute</span>' : '<span class="badge">fermé</span>') + '</td></tr>';
+  }).join('');
 }
 
 function histBan(steamId){
