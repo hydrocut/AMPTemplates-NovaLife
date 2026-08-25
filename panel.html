@@ -74,6 +74,10 @@ input:focus{outline:none;border-color:var(--accent)}
 .modal .box button{display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 12px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
 .dot.on{background:var(--ok)}.dot.off{background:#555}
+.gl{width:64px;text-align:right;font-size:12px}
+button.chip{display:inline-flex;align-items:center;gap:6px;min-width:200px;justify-content:flex-start;padding:6px 12px}
+button.chip img{width:26px;height:26px;object-fit:contain}
+#pick-search{width:100%;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -160,25 +164,23 @@ input:focus{outline:none;border-color:var(--accent)}
   <section>
     <h2>Donner un objet / un véhicule</h2>
     <div class="row" style="margin-bottom:10px">
-      <select id="give-player" style="min-width:180px"></select>
-      <span style="color:var(--muted)">|</span>
-      <input id="item-search" placeholder="Rechercher un objet…" style="width:200px" oninput="renderItemGrid()">
-      <span id="item-selected" class="muted">aucun objet sélectionné</span>
-      <input id="item-qty" type="number" value="1" min="1" style="width:70px">
+      <span class="muted gl">Joueur</span>
+      <select id="give-player" style="min-width:220px"></select>
+      <button onclick="showInventory()">Voir inventaire</button>
+      <button onclick="showVehicles()">Voir garage</button>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <span class="muted gl">Objet</span>
+      <button id="item-chip" class="chip" onclick="openItemPicker()">Choisir un objet…</button>
+      <input id="item-qty" type="number" value="1" min="1" style="width:70px" title="Quantité">
       <button class="primary" onclick="giveItem(true)">Donner</button>
       <button onclick="giveItem(false)">Retirer</button>
-      <button onclick="showInventory()">Voir inventaire</button>
     </div>
-    <div id="item-grid" class="pickgrid"></div>
     <div class="row">
-      <input id="veh-search" placeholder="Filtrer les véhicules…" style="width:220px" oninput="renderVehGrid()">
+      <span class="muted gl">Véhicule</span>
+      <button id="veh-chip" class="chip" onclick="openVehPicker()">Choisir un véhicule…</button>
       <button class="primary" onclick="giveVehicle()">Donner le véhicule</button>
-      <button onclick="showVehicles()">Voir garage du joueur</button>
     </div>
-    <div id="veh-grid" class="pickgrid" style="display:none"></div>
-    <div class="row" style="display:none">
-    </div>
-    <div id="give-info" class="muted" style="margin-top:10px"></div>
   </section>
 
   <section>
@@ -487,14 +489,12 @@ function loadCatalogs(){
     api('items').then(function(list){
       itemsLoaded = true;
       window._items = list;
-      renderItemGrid();
     }).catch(function(){});
   }
   if(!vehModelsLoaded){
     api('vehiclemodels').then(function(list){
       vehModelsLoaded = true;
       window._vehModels = list;
-      renderVehGrid();
     }).catch(function(){});
   }
 }
@@ -512,8 +512,8 @@ function resolveId(input, list, nameKey, idKey){
 function giveItem(give){
   var steamId = document.getElementById('give-player').value;
   if(!steamId) return toast('Sélectionne un joueur', true);
-  var itemId = selItem ? selItem.id : resolveId(document.getElementById('item-search').value, window._items, 'name', 'id');
-  if(itemId === null) return toast('Sélectionne un objet dans la grille', true);
+  if(!selItem) return toast('Choisis un objet d\'abord', true);
+  var itemId = selItem.id;
   var qty = parseInt(document.getElementById('item-qty').value) || 1;
   api(give ? 'giveitem' : 'removeitem', {steamId: steamId, itemId: itemId, amount: qty}).then(function(r){
     if(r.error){ toast(r.error, true); } else { toast(give ? 'Objet donné' : 'Objet retiré'); showInventory(); }
@@ -535,25 +535,32 @@ function vicon(modelId){ return '<img src="/vicon/' + modelId + '.png" class="vi
 
 // --- Grille de sélection d'objets (icônes cliquables) ---
 var selItem = null;
-function renderItemGrid(){
-  var grid = document.getElementById('item-grid');
+function openItemPicker(){
+  openModal('<h3>Choisir un objet</h3><input id="pick-search" placeholder="Rechercher (nom ou id)…" oninput="renderItemPick()"><div id="pick-grid" class="pickgrid"></div>', true);
+  renderItemPick();
+  var f = document.getElementById('pick-search'); if(f) f.focus();
+}
+function renderItemPick(){
+  var grid = document.getElementById('pick-grid');
+  if(!grid) return;
   if(!window._items){ grid.innerHTML = '<span class="muted">Chargement du catalogue…</span>'; return; }
-  var q = document.getElementById('item-search').value.trim().toLowerCase();
+  var q = (document.getElementById('pick-search').value || '').trim().toLowerCase();
   var list = window._items.filter(function(it){
     return !q || it.name.toLowerCase().indexOf(q) !== -1 || String(it.id) === q;
-  }).slice(0, 60);
-  grid.innerHTML = list.map(function(it){
-    return '<div class="pickcell' + (selItem && selItem.id === it.id ? ' sel' : '') + '" onclick="selectItem(' + it.id + ')">' +
+  });
+  var more = list.length > 96 ? '<span class="muted" style="grid-column:1/-1">… ' + (list.length - 96) + ' autres — affine la recherche</span>' : '';
+  grid.innerHTML = (list.slice(0, 96).map(function(it){
+    return '<div class="pickcell' + (selItem && selItem.id === it.id ? ' sel' : '') + '" onclick="chooseItem(' + it.id + ')">' +
       '<img src="/icon/' + it.id + '.png" onerror="this.src=\'data:image/svg+xml,\'" loading="lazy">' +
       '<span title="' + esc(it.name) + '">' + esc(it.name) + '</span></div>';
-  }).join('') || '<span class="muted">Aucun objet trouvé</span>';
+  }).join('') + more) || '<span class="muted">Aucun objet trouvé</span>';
 }
-function selectItem(id){
+function chooseItem(id){
   var it = (window._items || []).filter(function(x){ return x.id === id; })[0];
   if(!it) return;
   selItem = it;
-  document.getElementById('item-selected').innerHTML = icon(it.id) + ' <b>' + esc(it.name) + '</b> (#' + it.id + ')';
-  renderItemGrid();
+  document.getElementById('item-chip').innerHTML = icon(it.id) + ' <b>' + esc(it.name) + '</b> <span class="muted">#' + it.id + '</span>';
+  closeModal();
 }
 
 function showInventory(){
@@ -578,29 +585,38 @@ function showInventory(){
 
 
 var selVeh = null;
-function renderVehGrid(){
-  var grid = document.getElementById('veh-grid');
-  if(!window._vehModels){ return; }
-  grid.style.display = 'grid';
-  var q = document.getElementById('veh-search').value.trim().toLowerCase();
+function openVehPicker(){
+  openModal('<h3>Choisir un véhicule</h3><input id="pick-search" placeholder="Rechercher (nom ou modelId)…" oninput="renderVehPick()"><div id="pick-grid" class="pickgrid"></div>', true);
+  renderVehPick();
+  var f = document.getElementById('pick-search'); if(f) f.focus();
+}
+function renderVehPick(){
+  var grid = document.getElementById('pick-grid');
+  if(!grid) return;
+  if(!window._vehModels){ grid.innerHTML = '<span class="muted">Chargement…</span>'; return; }
+  var q = (document.getElementById('pick-search').value || '').trim().toLowerCase();
   var list = window._vehModels.filter(function(v){ return !q || v.name.toLowerCase().indexOf(q) !== -1 || String(v.modelId) === q; });
   grid.innerHTML = list.map(function(v){
     var sel = selVeh && selVeh.modelId === v.modelId ? ' sel' : '';
-    return '<div class="pickcell' + sel + '" onclick="pickVeh(' + v.modelId + ')" title="' + esc(v.name) + ' (#' + v.modelId + ')">' +
+    return '<div class="pickcell' + sel + '" onclick="chooseVeh(' + v.modelId + ')" title="' + esc(v.name) + ' (#' + v.modelId + ')">' +
       '<img src="/vicon/' + v.modelId + '.png" onerror="this.outerHTML=\'<span style=&quot;font-size:26px&quot;>🚗</span>\'">' +
       '<span>' + esc(v.name) + '</span></div>';
-  }).join('');
+  }).join('') || '<span class="muted">Aucun véhicule trouvé</span>';
 }
-function pickVeh(modelId){
+function chooseVeh(modelId){
   selVeh = window._vehModels.filter(function(v){ return v.modelId === modelId; })[0] || null;
-  renderVehGrid();
+  if(selVeh){
+    document.getElementById('veh-chip').innerHTML =
+      '<img src="/vicon/' + selVeh.modelId + '.png" onerror="this.outerHTML=\'🚗 \'"> <b>' + esc(selVeh.name) + '</b> <span class="muted">#' + selVeh.modelId + '</span>';
+  }
+  closeModal();
 }
 
 function giveVehicle(){
   var steamId = document.getElementById('give-player').value;
   if(!steamId) return toast('Sélectionne un joueur', true);
-  var modelId = selVeh ? selVeh.modelId : resolveId(document.getElementById('veh-search').value, window._vehModels, 'name', 'modelId');
-  if(modelId === null) return toast('Sélectionne un véhicule dans la grille', true);
+  if(!selVeh) return toast('Choisis un véhicule d\'abord', true);
+  var modelId = selVeh.modelId;
   act('givevehicle', {steamId: steamId, modelId: modelId}, 'Véhicule ajouté au garage');
 }
 

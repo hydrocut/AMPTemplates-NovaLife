@@ -18,7 +18,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKWebPanel v1.5 — TeamKit.fr
+/// TKWebPanel v1.6 — TeamKit.fr
 ///
 /// Panel d'administration web embarqué dans le serveur Nova-Life.
 /// Le plugin démarre un serveur HTTP (port configurable, défaut 7791) qui
@@ -56,7 +56,7 @@ public class TKWebPanel : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.5 désactivé par config");
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.6 désactivé par config");
             return;
         }
         try
@@ -74,7 +74,7 @@ public class TKWebPanel : Plugin
             httpThread.IsBackground = true;
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.5 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.6 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
