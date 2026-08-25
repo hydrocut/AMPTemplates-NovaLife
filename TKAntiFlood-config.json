@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "maxAttempts": 8,
+  "windowSeconds": 20,
+  "banMinutes": 720,
+  "whitelist": "",
+  "blockLogIntervalSeconds": 30
+}

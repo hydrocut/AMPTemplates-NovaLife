@@ -111,6 +111,34 @@
     "SkipOnFailure": false
   },
   {
+    "UpdateStageName": "Plugin TKAntiFlood (protection anti-flood)",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKAntiFlood.dll",
+    "UpdateSourceArgs": "TKAntiFlood.dll",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/",
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": true
+  },
+  {
+    "UpdateStageName": "Création du dossier TKAntiFlood",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "CreateDirectory",
+    "UpdateSourceArgs": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKAntiFlood",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
+    "UpdateStageName": "Config par défaut - plugin TKAntiFlood",
+    "UpdateSourcePlatform": "All",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/hydrocut/AMPTemplates-NovaLife/main/TKAntiFlood-config.json",
+    "UpdateSourceArgs": "config.json",
+    "UpdateSourceTarget": "{{$FullBaseDir}}Servers/{{ServerProfile}}/Plugins/TKAntiFlood/",
+    "OverwriteExistingFiles": false,
+    "SkipOnFailure": false
+  },
+  {
     "UpdateStageName": "Création du dossier TeamKitIntro",
     "UpdateSourcePlatform": "All",
     "UpdateSource": "CreateDirectory",
