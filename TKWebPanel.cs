@@ -18,7 +18,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKWebPanel v1.4 — TeamKit.fr
+/// TKWebPanel v1.5 — TeamKit.fr
 ///
 /// Panel d'administration web embarqué dans le serveur Nova-Life.
 /// Le plugin démarre un serveur HTTP (port configurable, défaut 7791) qui
@@ -56,7 +56,7 @@ public class TKWebPanel : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.4 désactivé par config");
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.5 désactivé par config");
             return;
         }
         try
@@ -74,7 +74,7 @@ public class TKWebPanel : Plugin
             httpThread.IsBackground = true;
             httpThread.Name = "TKWebPanel-HTTP";
             httpThread.Start();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v1.4 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v1.5 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -384,6 +384,12 @@ public class TKWebPanel : Plugin
                 return ApiOfflineRemoveItem(body);
             case "/api/offlinevehicles":
                 return ApiOfflineVehicles(ctx.Request.QueryString["characterId"]);
+            case "/api/playercard":
+                return ApiPlayerCard(ctx.Request.QueryString["characterId"]);
+            case "/api/areas":
+                return ApiPlayerAreas(ctx.Request.QueryString["characterId"]);
+            case "/api/bizs":
+                return ApiBizs();
             case "/api/floodbans":
                 return ApiFloodBans();
             case "/api/floodunban":
@@ -1643,6 +1649,243 @@ public class TKWebPanel : Plugin
             sb.Append("]");
             return sb.ToString();
         });
+    }
+
+    // ------------------------------------------------------------------
+    // Fiche joueur, propriétés, entreprises (lecture life.db)
+    // ------------------------------------------------------------------
+    private class CardRow
+    {
+        public int Id { get; set; }
+        public string Firstname { get; set; }
+        public string Lastname { get; set; }
+        public double Bank { get; set; }
+        public string Inventory { get; set; }
+        public int Health { get; set; }
+        public int Hunger { get; set; }
+        public int Thirst { get; set; }
+        public bool PermisB { get; set; }
+        public int PermisPoints { get; set; }
+        public int WorkTime { get; set; }
+        public int XP { get; set; }
+        public int Level { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Commune { get; set; }
+        public int PrisonTime { get; set; }
+        public double LastPosX { get; set; }
+        public double LastPosY { get; set; }
+        public double LastPosZ { get; set; }
+        public long LastDisconnect { get; set; }
+        public int StatDiamond { get; set; }
+        public int StatCopper { get; set; }
+        public int StatRock { get; set; }
+        public int StatTree { get; set; }
+        public int BizId { get; set; }
+        public string Username { get; set; }
+        public int AdminLevel { get; set; }
+    }
+
+    private class WarnRow
+    {
+        public string Text { get; set; }
+        public string Admin { get; set; }
+        public string Date { get; set; }
+        public int Level { get; set; }
+    }
+
+    private class BizRow
+    {
+        public int Id { get; set; }
+        public string BizName { get; set; }
+        public string Activities { get; set; }
+        public int OwnerId { get; set; }
+        public int TerrainId { get; set; }
+        public double Bank { get; set; }
+        public double Salaire { get; set; }
+        public bool IsRecruiting { get; set; }
+    }
+
+    private class AreaRow
+    {
+        public int AreaId { get; set; }
+        public string Permissions { get; set; }
+        public double Price { get; set; }
+        public double RentPrice { get; set; }
+        public bool IsRentable { get; set; }
+    }
+
+    private string ApiPlayerCard(string characterIdStr)
+    {
+        int characterId;
+        if (!int.TryParse(characterIdStr ?? "", out characterId) || characterId <= 0)
+        {
+            return "{\"error\":\"characterId invalide\"}";
+        }
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            List<CardRow> rows = conn.Query<CardRow>(
+                "SELECT c.Id, c.Firstname, c.Lastname, c.Bank, c.Inventory, c.Health, c.Hunger, c.Thirst, " +
+                "c.PermisB, c.PermisPoints, c.WorkTime, c.XP, c.Level, c.PhoneNumber, c.Commune, c.PrisonTime, " +
+                "c.LastPosX, c.LastPosY, c.LastPosZ, c.LastDisconnect, " +
+                "c.StatDiamond, c.StatCopper, c.StatRock, c.StatTree, c.BizId, " +
+                "a.Username, a.AdminLevel " +
+                "FROM Characters c LEFT JOIN Accounts a ON a.Id = c.AccountId WHERE c.Id = ?", characterId);
+            if (rows.Count == 0)
+            {
+                return "{\"error\":\"personnage introuvable\"}";
+            }
+            CardRow r = rows[0];
+
+            string bizName = "";
+            if (r.BizId > 0)
+            {
+                List<BizRow> biz = conn.Query<BizRow>("SELECT Id, BizName, Activities, OwnerId, TerrainId, Bank, Salaire, IsRecruiting FROM Bizs WHERE Id = ?", r.BizId);
+                if (biz.Count > 0)
+                {
+                    bizName = biz[0].BizName ?? "";
+                }
+            }
+
+            int areaCount = 0;
+            foreach (AreaRow a in conn.Query<AreaRow>("SELECT AreaId, Permissions, Price, RentPrice, IsRentable FROM Areas WHERE Permissions LIKE ?", "%\"characterId\":" + characterId + "%"))
+            {
+                areaCount++;
+            }
+
+            StringBuilder warns = new StringBuilder("[");
+            bool wf = true;
+            foreach (WarnRow w in conn.Query<WarnRow>("SELECT Text, Admin, Date, Level FROM Warns WHERE CharacterId = ? ORDER BY Id DESC LIMIT 20", characterId))
+            {
+                if (!wf) warns.Append(",");
+                wf = false;
+                warns.Append("{\"text\":").Append(Json.Str(w.Text ?? ""));
+                warns.Append(",\"admin\":").Append(Json.Str(w.Admin ?? ""));
+                warns.Append(",\"date\":").Append(Json.Str(w.Date ?? ""));
+                warns.Append(",\"level\":").Append(w.Level).Append("}");
+            }
+            warns.Append("]");
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{\"characterId\":").Append(r.Id);
+            sb.Append(",\"username\":").Append(Json.Str(r.Username ?? ""));
+            sb.Append(",\"adminLevel\":").Append(r.AdminLevel);
+            sb.Append(",\"firstname\":").Append(Json.Str(r.Firstname ?? ""));
+            sb.Append(",\"lastname\":").Append(Json.Str(r.Lastname ?? ""));
+            sb.Append(",\"money\":").Append(WalletMoney(r.Inventory).ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+            sb.Append(",\"bank\":").Append(r.Bank.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+            sb.Append(",\"health\":").Append(r.Health);
+            sb.Append(",\"hunger\":").Append(r.Hunger);
+            sb.Append(",\"thirst\":").Append(r.Thirst);
+            sb.Append(",\"permisB\":").Append(r.PermisB ? "true" : "false");
+            sb.Append(",\"permisPoints\":").Append(r.PermisPoints);
+            sb.Append(",\"level\":").Append(r.Level);
+            sb.Append(",\"xp\":").Append(r.XP);
+            sb.Append(",\"workTimeMin\":").Append(r.WorkTime);
+            sb.Append(",\"prisonTime\":").Append(r.PrisonTime);
+            sb.Append(",\"phone\":").Append(Json.Str(r.PhoneNumber ?? ""));
+            sb.Append(",\"commune\":").Append(Json.Str(r.Commune ?? ""));
+            sb.Append(",\"lastDisconnect\":").Append(r.LastDisconnect);
+            sb.Append(",\"lastX\":").Append(r.LastPosX.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+            sb.Append(",\"lastY\":").Append(r.LastPosY.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+            sb.Append(",\"lastZ\":").Append(r.LastPosZ.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+            sb.Append(",\"statDiamond\":").Append(r.StatDiamond);
+            sb.Append(",\"statCopper\":").Append(r.StatCopper);
+            sb.Append(",\"statRock\":").Append(r.StatRock);
+            sb.Append(",\"statTree\":").Append(r.StatTree);
+            sb.Append(",\"bizId\":").Append(r.BizId);
+            sb.Append(",\"bizName\":").Append(Json.Str(bizName));
+            sb.Append(",\"areaCount\":").Append(areaCount);
+            sb.Append(",\"warns\":").Append(warns);
+            sb.Append("}");
+            return sb.ToString();
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    private string ApiPlayerAreas(string characterIdStr)
+    {
+        int characterId;
+        if (!int.TryParse(characterIdStr ?? "", out characterId) || characterId <= 0)
+        {
+            return "{\"error\":\"characterId invalide\"}";
+        }
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            foreach (AreaRow a in conn.Query<AreaRow>(
+                "SELECT AreaId, Permissions, Price, RentPrice, IsRentable FROM Areas WHERE Permissions LIKE ?",
+                "%\"characterId\":" + characterId + "%"))
+            {
+                // vérifie que c'est bien le propriétaire (owner), pas un co-owner homonyme partiel
+                bool owner = Regex.IsMatch(a.Permissions ?? "",
+                    "\"owner\"\\s*:\\s*\\{[^}]*\"characterId\"\\s*:\\s*" + characterId + "\\b");
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"areaId\":").Append(a.AreaId);
+                sb.Append(",\"owner\":").Append(owner ? "true" : "false");
+                sb.Append(",\"price\":").Append(a.Price.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(",\"rentPrice\":").Append(a.RentPrice.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(",\"isRentable\":").Append(a.IsRentable ? "true" : "false");
+                sb.Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    private string ApiBizs()
+    {
+        SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+        try
+        {
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            foreach (BizRow b in conn.Query<BizRow>(
+                "SELECT Id, BizName, Activities, OwnerId, TerrainId, Bank, Salaire, IsRecruiting FROM Bizs ORDER BY Id"))
+            {
+                string ownerName = "";
+                List<CharRow2> o = conn.Query<CharRow2>("SELECT Id, Firstname, Lastname FROM Characters WHERE Id = ?", b.OwnerId);
+                if (o.Count > 0)
+                {
+                    ownerName = (o[0].Firstname + " " + o[0].Lastname).Trim();
+                }
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"id\":").Append(b.Id);
+                sb.Append(",\"name\":").Append(Json.Str(b.BizName ?? ""));
+                sb.Append(",\"activities\":").Append(Json.Str(b.Activities ?? ""));
+                sb.Append(",\"ownerId\":").Append(b.OwnerId);
+                sb.Append(",\"ownerName\":").Append(Json.Str(ownerName));
+                sb.Append(",\"terrainId\":").Append(b.TerrainId);
+                sb.Append(",\"bank\":").Append(b.Bank.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(",\"salaire\":").Append(b.Salaire.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(",\"recruiting\":").Append(b.IsRecruiting ? "true" : "false");
+                sb.Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+        finally
+        {
+            conn.Close();
+        }
+    }
+
+    private class CharRow2
+    {
+        public int Id { get; set; }
+        public string Firstname { get; set; }
+        public string Lastname { get; set; }
     }
 
     private string ApiAntiCheat()

@@ -61,7 +61,15 @@ input:focus{outline:none;border-color:var(--accent)}
 .pickcell img{width:40px;height:40px;object-fit:contain}
 .pickcell span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:30}
-.modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:420px;width:92%;max-height:70vh;overflow-y:auto}
+.modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:420px;width:92%;max-height:78vh;overflow-y:auto}
+.modal .box.wide{max-width:920px}
+.modal .box.wide button{display:inline-block;width:auto;text-align:center;margin:0}
+.modal .close{float:right;font-size:16px;cursor:pointer;color:var(--muted);padding:2px 8px;border:none;background:none}
+.modal .close:hover{color:var(--bad)}
+.cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:10px}
+.cardgrid .kv{background:#0f1420;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px}
+.cardgrid .kv .k{color:var(--muted);font-size:11px}
+.cardgrid .kv .v{font-weight:600;margin-top:2px}
 .modal .box h3{margin-bottom:12px;color:var(--accent);font-size:15px}
 .modal .box button{display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 12px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
@@ -163,10 +171,12 @@ input:focus{outline:none;border-color:var(--accent)}
     </div>
     <div id="item-grid" class="pickgrid"></div>
     <div class="row">
-      <input id="veh-search" list="veh-list" placeholder="Véhicule (nom ou modelId)" style="width:220px">
-      <datalist id="veh-list"></datalist>
+      <input id="veh-search" placeholder="Filtrer les véhicules…" style="width:220px" oninput="renderVehGrid()">
       <button class="primary" onclick="giveVehicle()">Donner le véhicule</button>
       <button onclick="showVehicles()">Voir garage du joueur</button>
+    </div>
+    <div id="veh-grid" class="pickgrid" style="display:none"></div>
+    <div class="row" style="display:none">
     </div>
     <div id="give-info" class="muted" style="margin-top:10px"></div>
   </section>
@@ -183,7 +193,16 @@ input:focus{outline:none;border-color:var(--accent)}
       <tbody id="history"><tr><td colspan="10" class="muted">Clique « Charger » pour lister tous les comptes</td></tr></tbody>
     </table>
     </div>
-    <div id="hist-info" class="muted" style="margin-top:10px"></div>
+  </section>
+
+  <section>
+    <h2>Entreprises <button onclick="loadBizs()" style="margin-left:10px">Charger / actualiser</button></h2>
+    <div class="tblwrap">
+    <table>
+      <thead><tr><th>#</th><th>Nom</th><th>Propriétaire</th><th>Banque</th><th>Salaire</th><th>Terrain</th><th>Recrutement</th></tr></thead>
+      <tbody id="bizs"><tr><td colspan="7" class="muted">Clique « Charger »</td></tr></tbody>
+    </table>
+    </div>
   </section>
 
   <section>
@@ -405,9 +424,11 @@ function tpCoords(id){
     act('tp', {steamId: id, x: parseFloat(m[0]), y: parseFloat(m[1]), z: parseFloat(m[2])}, 'Téléporté');
   } else { toast('Format invalide', true); }
 }
-function openModal(html){
+function openModal(html, wide){
   var m = document.getElementById('modal');
-  m.querySelector('.box').innerHTML = html;
+  var box = m.querySelector('.box');
+  box.className = wide ? 'box wide' : 'box';
+  box.innerHTML = '<button class="close" onclick="closeModal()">✕</button>' + html;
   m.style.display = 'flex';
 }
 function closeModal(){ document.getElementById('modal').style.display = 'none'; }
@@ -473,9 +494,7 @@ function loadCatalogs(){
     api('vehiclemodels').then(function(list){
       vehModelsLoaded = true;
       window._vehModels = list;
-      document.getElementById('veh-list').innerHTML = list.map(function(v){
-        return '<option value="' + esc(v.name) + '">#' + v.modelId + '</option>';
-      }).join('');
+      renderVehGrid();
     }).catch(function(){});
   }
 }
@@ -502,7 +521,7 @@ function giveItem(give){
 }
 function invRemove(steamId, itemId, qty){
   api('removeitem', {steamId: steamId, itemId: itemId, amount: qty}).then(function(r){
-    if(r.error){ toast(r.error, true); } else { toast('Retiré ×' + qty); showInventory(); }
+    if(r.error){ toast(r.error, true); } else { toast('Retiré ×' + qty); document.getElementById('give-player').value = steamId; showInventory(); }
   });
 }
 function invRemovePrompt(steamId, itemId, max){
@@ -540,60 +559,83 @@ function selectItem(id){
 function showInventory(){
   var steamId = document.getElementById('give-player').value;
   if(!steamId) return toast('Sélectionne un joueur', true);
+  var pl = playersCache.filter(function(p){ return p.steamId === steamId; })[0];
+  var who = pl ? pl.pseudo : steamId;
   api('inventory?steamId=' + encodeURIComponent(steamId)).then(function(list){
-    var el = document.getElementById('give-info');
-    if(list.error){ el.textContent = list.error; return; }
-    if(!list.length){ el.innerHTML = '<b>Inventaire :</b> vide.'; return; }
-    var sid = steamId;
-    el.innerHTML = '<b>Inventaire :</b><div class="invgrid">' + list.map(function(i){
-      return '<div class="invcell">' + icon(i.itemId) +
-        '<span title="' + esc(i.name) + '">' + esc(i.name) + '</span><b>×' + i.number + '</b>' +
-        '<button title="Retirer 1" onclick="invRemove(\'' + sid + '\',' + i.itemId + ',1)">−1</button>' +
-        '<button title="Retirer N" onclick="invRemovePrompt(\'' + sid + '\',' + i.itemId + ',' + i.number + ')">−N</button>' +
-        '<button class="danger" title="Tout retirer" onclick="if(confirm(\'Tout retirer ?\'))invRemove(\'' + sid + '\',' + i.itemId + ',' + i.number + ')">🗑</button>' +
-        '</div>';
-    }).join('') + '</div>';
+    if(list.error){ toast(list.error, true); return; }
+    var body = !list.length ? '<p class="muted">Inventaire vide.</p>' :
+      '<div class="invgrid">' + list.map(function(i){
+        return '<div class="invcell">' + icon(i.itemId) +
+          '<span title="' + esc(i.name) + '">' + esc(i.name) + '</span><b>×' + i.number + '</b>' +
+          '<button title="Retirer 1" onclick="invRemove(\'' + steamId + '\',' + i.itemId + ',1)">−1</button>' +
+          '<button title="Retirer N" onclick="invRemovePrompt(\'' + steamId + '\',' + i.itemId + ',' + i.number + ')">−N</button>' +
+          '<button class="danger" title="Tout retirer" onclick="if(confirm(\'Tout retirer ?\'))invRemove(\'' + steamId + '\',' + i.itemId + ',' + i.number + ')">🗑</button>' +
+          '</div>';
+      }).join('') + '</div>';
+    openModal('<h3>Inventaire de ' + esc(who) + '</h3>' + body, true);
   });
+}
+
+
+var selVeh = null;
+function renderVehGrid(){
+  var grid = document.getElementById('veh-grid');
+  if(!window._vehModels){ return; }
+  grid.style.display = 'grid';
+  var q = document.getElementById('veh-search').value.trim().toLowerCase();
+  var list = window._vehModels.filter(function(v){ return !q || v.name.toLowerCase().indexOf(q) !== -1 || String(v.modelId) === q; });
+  grid.innerHTML = list.map(function(v){
+    var sel = selVeh && selVeh.modelId === v.modelId ? ' sel' : '';
+    return '<div class="pickcell' + sel + '" onclick="pickVeh(' + v.modelId + ')" title="' + esc(v.name) + ' (#' + v.modelId + ')">' +
+      '<img src="/vicon/' + v.modelId + '.png" onerror="this.outerHTML=\'<span style=&quot;font-size:26px&quot;>🚗</span>\'">' +
+      '<span>' + esc(v.name) + '</span></div>';
+  }).join('');
+}
+function pickVeh(modelId){
+  selVeh = window._vehModels.filter(function(v){ return v.modelId === modelId; })[0] || null;
+  renderVehGrid();
 }
 
 function giveVehicle(){
   var steamId = document.getElementById('give-player').value;
   if(!steamId) return toast('Sélectionne un joueur', true);
-  var modelId = resolveId(document.getElementById('veh-search').value, window._vehModels, 'name', 'modelId');
-  if(modelId === null) return toast('Véhicule introuvable', true);
+  var modelId = selVeh ? selVeh.modelId : resolveId(document.getElementById('veh-search').value, window._vehModels, 'name', 'modelId');
+  if(modelId === null) return toast('Sélectionne un véhicule dans la grille', true);
   act('givevehicle', {steamId: steamId, modelId: modelId}, 'Véhicule ajouté au garage');
 }
 
 function showVehicles(){
   var steamId = document.getElementById('give-player').value;
   if(!steamId) return toast('Sélectionne un joueur', true);
+  var pl = playersCache.filter(function(p){ return p.steamId === steamId; })[0];
+  var who = pl ? pl.pseudo : steamId;
   api('vehicles?steamId=' + encodeURIComponent(steamId)).then(function(list){
-    var el = document.getElementById('give-info');
-    if(list.error){ el.textContent = list.error; return; }
-    if(!list.length){ el.innerHTML = '<b>Garage :</b> aucun véhicule.'; return; }
-    el.innerHTML = '<b>Garage :</b><div class="tblwrap"><table style="margin-top:8px">' +
-      '<thead><tr><th>#</th><th>Modèle</th><th>Plaque</th><th>État</th><th>Carburant</th><th>Actions</th></tr></thead><tbody>' +
-      list.map(function(v){
-        var st = v.isStowed ? '<span class="badge">au garage</span>' : '<span class="badge" style="color:var(--ok)">sorti</span>';
-        return '<tr><td class="mono muted">' + v.vehicleId + '</td>' +
-          '<td>' + vicon(v.modelId) + ' <b>' + esc(v.name) + '</b></td>' +
-          '<td class="mono">' + esc(v.plate || '—') + '</td>' +
-          '<td>' + st + '</td>' +
-          '<td>' + v.fuel + '%</td>' +
-          '<td class="actions">' +
-          (v.isStowed ? '<button onclick="vehAction(\'vehicleunstow\',' + v.vehicleId + ',\'' + steamId + '\')">Sortir près du joueur</button>'
-                      : '<button onclick="vehAction(\'vehiclestow\',' + v.vehicleId + ')">Ranger au garage</button>') +
-          '<button class="danger" onclick="if(confirm(\'Supprimer ce véhicule ?\'))vehAction(\'vehicledelete\',' + v.vehicleId + ')">Suppr</button>' +
-          '</td></tr>';
-      }).join('') + '</tbody></table></div>';
+    if(list.error){ toast(list.error, true); return; }
+    var body = !list.length ? '<p class="muted">Aucun véhicule.</p>' : vehTable(list, function(v){
+      return (v.isStowed ? '<button onclick="vehAction(\'vehicleunstow\',' + v.vehicleId + ',\'' + steamId + '\')">Sortir près du joueur</button>'
+                         : '<button onclick="vehAction(\'vehiclestow\',' + v.vehicleId + ')">Ranger</button>') +
+        ' <button class="danger" onclick="if(confirm(\'Supprimer ce véhicule ?\'))vehAction(\'vehicledelete\',' + v.vehicleId + ')">Suppr</button>';
+    });
+    openModal('<h3>Garage de ' + esc(who) + '</h3>' + body, true);
   });
+}
+function vehTable(list, actionsFn){
+  return '<div class="tblwrap"><table>' +
+    '<thead><tr><th></th><th>#</th><th>Modèle</th><th>Plaque</th><th>État</th><th>Carburant</th><th>Actions</th></tr></thead><tbody>' +
+    list.map(function(v){
+      var st = v.isStowed ? '<span class="badge">au garage</span>' : '<span class="badge" style="color:var(--ok)">sorti</span>';
+      return '<tr><td>' + vicon(v.modelId) + '</td><td class="mono muted">' + v.vehicleId + '</td>' +
+        '<td><b>' + esc(v.name) + '</b></td><td class="mono">' + esc(v.plate || '—') + '</td>' +
+        '<td>' + st + '</td><td>' + v.fuel + '%</td>' +
+        '<td class="actions">' + actionsFn(v) + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
 }
 
 function vehAction(path, vehicleId, steamId){
   var body = {vehicleId: vehicleId};
   if(steamId) body.steamId = steamId;
   api(path, body).then(function(r){
-    if(r.error){ toast(r.error, true); } else { toast('OK'); showVehicles(); refresh(); }
+    if(r.error){ toast(r.error, true); } else { toast('OK'); showVehicles(); }
   });
 }
 
@@ -632,7 +674,8 @@ function renderHistory(){
       '<td>' + a.bans + (a.banned && a.banReason ? ' <span class="muted" title="' + esc(a.banReason) + '">ℹ</span>' : '') + '</td>' +
       '<td>' + statut + '</td>' +
       '<td class="actions">' +
-        (a.characterId > 0 ? '<button onclick="offInv(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Inv</button>' +
+        (a.characterId > 0 ? '<button onclick="playerCard(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Fiche</button>' +
+          '<button onclick="offInv(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Inv</button>' +
           '<button onclick="offGarage(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Garage</button>' : '') +
         (a.banned
           ? '<button onclick="histUnban(\'' + a.steamId + '\')">Débannir</button>'
@@ -642,18 +685,17 @@ function renderHistory(){
 }
 function offInv(characterId, username){
   api('offlineinv?characterId=' + characterId).then(function(list){
-    var el = document.getElementById('hist-info');
-    if(list.error){ el.textContent = list.error; toast(list.error, true); return; }
-    if(!list.length){ el.innerHTML = '<b>Inventaire de ' + esc(username) + ' :</b> vide.'; return; }
-    el.innerHTML = '<b>Inventaire de ' + esc(username) + ' (hors ligne) :</b><div class="invgrid">' + list.map(function(i){
-      return '<div class="invcell">' + icon(i.itemId) +
-        '<span title="' + esc(i.name) + '">' + esc(i.name) + '</span><b>×' + i.number + '</b>' +
-        '<button title="Retirer 1" onclick="offRemove(' + characterId + ',' + i.itemId + ',1,\'' + esc(username) + '\')">−1</button>' +
-        '<button title="Retirer N" onclick="offRemovePrompt(' + characterId + ',' + i.itemId + ',' + i.number + ',\'' + esc(username) + '\')">−N</button>' +
-        '<button class="danger" title="Tout retirer" onclick="if(confirm(\'Tout retirer ?\'))offRemove(' + characterId + ',' + i.itemId + ',' + i.number + ',\'' + esc(username) + '\')">🗑</button>' +
-        '</div>';
-    }).join('') + '</div>';
-    el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    if(list.error){ toast(list.error, true); return; }
+    var body = !list.length ? '<p class="muted">Inventaire vide.</p>' :
+      '<div class="invgrid">' + list.map(function(i){
+        return '<div class="invcell">' + icon(i.itemId) +
+          '<span title="' + esc(i.name) + '">' + esc(i.name) + '</span><b>×' + i.number + '</b>' +
+          '<button title="Retirer 1" onclick="offRemove(' + characterId + ',' + i.itemId + ',1,\'' + esc(username) + '\')">−1</button>' +
+          '<button title="Retirer N" onclick="offRemovePrompt(' + characterId + ',' + i.itemId + ',' + i.number + ',\'' + esc(username) + '\')">−N</button>' +
+          '<button class="danger" title="Tout retirer" onclick="if(confirm(\'Tout retirer ?\'))offRemove(' + characterId + ',' + i.itemId + ',' + i.number + ',\'' + esc(username) + '\')">🗑</button>' +
+          '</div>';
+      }).join('') + '</div>';
+    openModal('<h3>Inventaire de ' + esc(username) + ' <span class="badge">hors ligne</span></h3>' + body, true);
   });
 }
 function offRemove(characterId, itemId, qty, username){
@@ -668,29 +710,81 @@ function offRemovePrompt(characterId, itemId, max, username){
 }
 function offGarage(characterId, username){
   api('offlinevehicles?characterId=' + characterId).then(function(list){
-    var el = document.getElementById('hist-info');
-    if(list.error){ el.textContent = list.error; toast(list.error, true); return; }
-    if(!list.length){ el.innerHTML = '<b>Garage de ' + esc(username) + ' :</b> aucun véhicule.'; return; }
-    el.innerHTML = '<b>Garage de ' + esc(username) + ' (hors ligne) :</b><div class="tblwrap"><table style="margin-top:8px">' +
-      '<thead><tr><th></th><th>#</th><th>Modèle</th><th>Plaque</th><th>État</th><th>Carburant</th><th>Actions</th></tr></thead><tbody>' +
-      list.map(function(v){
-        var st = v.isStowed ? '<span class="badge">au garage</span>' : '<span class="badge" style="color:var(--ok)">sorti</span>';
-        return '<tr><td>' + vicon(v.modelId) + '</td><td class="mono muted">' + v.vehicleId + '</td>' +
-          '<td><b>' + esc(v.name) + '</b></td>' +
-          '<td class="mono">' + esc(v.plate || '—') + '</td>' +
-          '<td>' + st + '</td>' +
-          '<td>' + v.fuel + '%</td>' +
-          '<td class="actions">' +
-          (v.isStowed ? '' : '<button onclick="offVehAction(\'vehiclestow\',' + v.vehicleId + ',' + characterId + ',\'' + esc(username) + '\')">Ranger au garage</button>') +
-          '<button class="danger" onclick="if(confirm(\'Supprimer ce véhicule ?\'))offVehAction(\'vehicledelete\',' + v.vehicleId + ',' + characterId + ',\'' + esc(username) + '\')">Suppr</button>' +
-          '</td></tr>';
-      }).join('') + '</tbody></table></div>';
-    el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    if(list.error){ toast(list.error, true); return; }
+    var body = !list.length ? '<p class="muted">Aucun véhicule.</p>' : vehTable(list, function(v){
+      return (v.isStowed ? '' : '<button onclick="offVehAction(\'vehiclestow\',' + v.vehicleId + ',' + characterId + ',\'' + esc(username) + '\')">Ranger</button> ') +
+        '<button class="danger" onclick="if(confirm(\'Supprimer ce véhicule ?\'))offVehAction(\'vehicledelete\',' + v.vehicleId + ',' + characterId + ',\'' + esc(username) + '\')">Suppr</button>';
+    });
+    openModal('<h3>Garage de ' + esc(username) + ' <span class="badge">hors ligne</span></h3>' + body, true);
   });
 }
 function offVehAction(path, vehicleId, characterId, username){
   api(path, {vehicleId: vehicleId}).then(function(r){
     if(r.error){ toast(r.error, true); } else { toast('OK'); offGarage(characterId, username); }
+  });
+}
+
+
+function playerCard(characterId, username){
+  api('playercard?characterId=' + characterId).then(function(c){
+    if(c.error){ toast(c.error, true); return; }
+    function kv(k, v){ return '<div class="kv"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
+    var lastDeco = c.lastDisconnect > 0 ? new Date(c.lastDisconnect * 1000).toLocaleString('fr-FR') : '—';
+    var h = '<h3>' + esc(c.firstname + ' ' + c.lastname) + ' <span class="muted">(' + esc(c.username) + ')</span>' +
+      (c.adminLevel > 0 ? ' <span class="badge admin">admin ' + c.adminLevel + '</span>' : '') + '</h3>';
+    h += '<div class="cardgrid">' +
+      kv('Espèces', fmtMoney(c.money)) + kv('Banque', fmtMoney(c.bank)) +
+      kv('Niveau', c.level + ' (XP ' + c.xp + ')') +
+      kv('Vie / Faim / Soif', c.health + ' / ' + c.hunger + ' / ' + c.thirst) +
+      kv('Permis B', (c.permisB ? 'Oui' : 'Non') + ' — ' + c.permisPoints + ' pts') +
+      kv('Téléphone', esc(c.phone || '—')) +
+      kv('Commune', esc(c.commune || '—')) +
+      kv('Entreprise', c.bizId > 0 ? esc(c.bizName) + ' (#' + c.bizId + ')' : '—') +
+      kv('Temps de travail', Math.floor(c.workTimeMin / 60) + 'h' + String(c.workTimeMin % 60).padStart(2, '0')) +
+      kv('Prison restante', c.prisonTime > 0 ? c.prisonTime + ' min' : '—') +
+      kv('Dernière déconnexion', lastDeco) +
+      kv('Position de déco', c.lastX + ', ' + c.lastY + ', ' + c.lastZ) +
+      kv('Farm', '◆' + c.statDiamond + ' ⛏' + c.statCopper + ' ⛰' + c.statRock + ' 🌳' + c.statTree) +
+      kv('Propriétés', c.areaCount + ' terrain(s)') +
+      '</div>';
+    if(c.areaCount > 0){
+      h += '<p style="margin-top:10px"><button onclick="playerAreas(' + characterId + ',\'' + esc(username) + '\')">Voir les terrains</button></p>';
+    }
+    if(c.warns && c.warns.length){
+      h += '<h3 style="margin-top:14px">Avertissements (' + c.warns.length + ')</h3>' + c.warns.map(function(w){
+        return '<p style="font-size:12px;margin-top:4px"><span class="badge" style="color:var(--warn)">niv ' + w.level + '</span> ' +
+          esc(w.text) + ' <span class="muted">— ' + esc(w.admin) + ', ' + esc(w.date) + '</span></p>';
+      }).join('');
+    }
+    openModal(h, true);
+  });
+}
+function playerAreas(characterId, username){
+  api('areas?characterId=' + characterId).then(function(list){
+    if(list.error){ toast(list.error, true); return; }
+    var body = !list.length ? '<p class="muted">Aucun terrain.</p>' :
+      '<div class="tblwrap"><table><thead><tr><th>Terrain</th><th>Rôle</th><th>Prix</th><th>Loyer</th></tr></thead><tbody>' +
+      list.map(function(a){
+        return '<tr><td class="mono">#' + a.areaId + '</td>' +
+          '<td>' + (a.owner ? '<span class="badge" style="color:var(--ok)">propriétaire</span>' : '<span class="badge">co-propriétaire</span>') + '</td>' +
+          '<td>' + fmtMoney(a.price) + '</td>' +
+          '<td>' + (a.isRentable ? fmtMoney(a.rentPrice) : '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    openModal('<h3>Terrains de ' + esc(username) + '</h3>' + body, true);
+  });
+}
+function loadBizs(){
+  api('bizs').then(function(list){
+    if(list.error){ toast(list.error, true); return; }
+    var tb = document.getElementById('bizs');
+    if(!list.length){ tb.innerHTML = '<tr><td colspan="7" class="muted">Aucune entreprise</td></tr>'; return; }
+    tb.innerHTML = list.map(function(b){
+      return '<tr><td class="mono muted">' + b.id + '</td><td><b>' + esc(b.name) + '</b></td>' +
+        '<td>' + esc(b.ownerName || '#' + b.ownerId) + '</td>' +
+        '<td>' + fmtMoney(b.bank) + '</td><td>' + fmtMoney(b.salaire) + '</td>' +
+        '<td class="mono">#' + b.terrainId + '</td>' +
+        '<td>' + (b.recruiting ? '<span class="badge" style="color:var(--ok)">recrute</span>' : '<span class="badge">fermé</span>') + '</td></tr>';
+    }).join('');
   });
 }
 
