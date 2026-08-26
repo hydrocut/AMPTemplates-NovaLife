@@ -9,7 +9,7 @@ using Mirror;
 using UnityEngine;
 
 /// <summary>
-/// TKAntiFlood v1.2 — TeamKit.fr
+/// TKAntiFlood v1.3 — TeamKit.fr
 ///
 /// Protège le serveur contre les floods de connexions TCP (attaques type
 /// "possible header attack with a header of: 0 bytes" en rafale depuis une
@@ -62,7 +62,8 @@ public class TKAntiFlood : Plugin
         LoadConfig();
         LoadBans();
         HookTransport();
-        Debug.Log("[TKFLOOD] Plugin TKAntiFlood v1.2 initialisé (seuil "
+        HookLogGuard();
+        Debug.Log("[TKFLOOD] Plugin TKAntiFlood v1.3 initialisé (seuil "
             + config.maxAttempts + " connexions / " + config.windowSeconds + "s, ban "
             + (config.banMinutes <= 0 ? "permanent" : config.banMinutes + " min") + ")");
     }
@@ -238,6 +239,120 @@ public class TKAntiFlood : Plugin
             return false;
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------
+    // Garde anti-paquets malformes (v1.3). Nova-Life/Telepathy logguent les
+    // attaques applicatives ("possible header attack", paquets corrompus) avec
+    // l'IP de l'auteur. On ecoute ce flux de logs (thread-safe), on compte les
+    // paquets malformes par IP sur une fenetre, et on bannit l'IP au-dela du
+    // seuil -> stoppe le flood ET les reconnexions. Aucun acces a l'etat reseau
+    // depuis le handler (il peut tourner hors thread principal) : on lit juste
+    // le texte du log et on ecrit dans banned.txt (verrou).
+    // ------------------------------------------------------------------
+    private readonly Dictionary<string, List<double>> packetHits = new Dictionary<string, List<double>>();
+    private readonly Dictionary<string, double> packetLastLog = new Dictionary<string, double>();
+    private readonly object logGuardLock = new object();
+    private double authorityLastLog;
+    private long authorityCount;
+    private static readonly Regex ipRegex = new Regex(@"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", RegexOptions.Compiled);
+
+    private void HookLogGuard()
+    {
+        try
+        {
+            Application.logMessageReceivedThreaded += OnLogGuard;
+            Debug.Log("[TKFLOOD] Garde anti-paquets active (seuil " + config.packetThreshold
+                + " paquets malformes / " + config.packetWindowSeconds + "s -> ban IP)");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKFLOOD] Impossible d'activer la garde anti-paquets : " + ex.Message);
+        }
+    }
+
+    private void OnLogGuard(string condition, string stackTrace, LogType type)
+    {
+        if (condition == null || config == null || !config.packetGuard)
+        {
+            return;
+        }
+        try
+        {
+            // Paquet malforme AVEC IP de l'auteur : header attack / receive invalide
+            bool malformed = condition.IndexOf("possible header attack", StringComparison.Ordinal) >= 0
+                || condition.IndexOf("ReadMessageBlocking", StringComparison.Ordinal) >= 0;
+            if (malformed)
+            {
+                Match m = ipRegex.Match(condition);
+                if (!m.Success)
+                {
+                    return; // pas d'IP dans ce log (ex : trace d'exception) -> on ignore
+                }
+                string ip = m.Groups[1].Value;
+                if (ip == "127.0.0.1" || whitelist.Contains(ip))
+                {
+                    return;
+                }
+                double now = Now();
+                bool doBan = false;
+                int count = 0;
+                lock (logGuardLock)
+                {
+                    if (IsBanned(ip, now))
+                    {
+                        return;
+                    }
+                    List<double> hits;
+                    if (!packetHits.TryGetValue(ip, out hits))
+                    {
+                        hits = new List<double>();
+                        packetHits[ip] = hits;
+                    }
+                    hits.Add(now);
+                    double start = now - config.packetWindowSeconds;
+                    hits.RemoveAll(delegate (double t) { return t < start; });
+                    count = hits.Count;
+                    if (count >= config.packetThreshold)
+                    {
+                        double expiry = config.banMinutes <= 0 ? 0 : now + config.banMinutes * 60.0;
+                        banned[ip] = expiry;
+                        packetHits.Remove(ip);
+                        SaveBans();
+                        doBan = true;
+                    }
+                }
+                if (doBan)
+                {
+                    Debug.Log("[TKFLOOD] PACKET-BAN ip=" + ip + " (" + count + " paquets malformes en "
+                        + config.packetWindowSeconds + "s"
+                        + (config.banMinutes <= 0 ? ", permanent)" : ", " + config.banMinutes + " min)"));
+                }
+                return;
+            }
+
+            // Ordre reseau sur objet non possede = mod menu actif. Pas d'IP dans
+            // le log -> on ne peut pas cibler l'auteur, on signale (throttle).
+            if (condition.IndexOf("without authority", StringComparison.Ordinal) >= 0)
+            {
+                double now = Now();
+                long total;
+                lock (logGuardLock)
+                {
+                    authorityCount++;
+                    total = authorityCount;
+                    if (now - authorityLastLog < 30)
+                    {
+                        return;
+                    }
+                    authorityLastLog = now;
+                }
+                Debug.Log("[TKFLOOD] ALERTE mod-menu : " + total + " ordres reseau non autorises depuis le demarrage (triche probable en jeu)");
+            }
+        }
+        catch
+        {
+        }
     }
 
     private void Ban(string ip, double now, int attemptCount)
@@ -505,6 +620,11 @@ public class TKAntiFloodConfig
     public string whitelist = "";
     // Intervalle mini entre deux logs "BLOCKED" pour une même IP (anti-spam console)
     public int blockLogIntervalSeconds = 30;
+    // Garde anti-paquets malformes : bannit une IP qui envoie des paquets
+    // corrompus (attaques "header attack" / flood applicatif post-connexion).
+    public bool packetGuard = true;
+    public int packetThreshold = 4;      // paquets malformes tolerees par IP
+    public int packetWindowSeconds = 30; // sur cette fenetre glissante
 
     public static string ToJson(TKAntiFloodConfig c)
     {
@@ -515,7 +635,10 @@ public class TKAntiFloodConfig
         sb.AppendLine("  \"windowSeconds\": " + c.windowSeconds + ",");
         sb.AppendLine("  \"banMinutes\": " + c.banMinutes + ",");
         sb.AppendLine("  \"whitelist\": \"" + Escape(c.whitelist) + "\",");
-        sb.AppendLine("  \"blockLogIntervalSeconds\": " + c.blockLogIntervalSeconds);
+        sb.AppendLine("  \"blockLogIntervalSeconds\": " + c.blockLogIntervalSeconds + ",");
+        sb.AppendLine("  \"packetGuard\": " + (c.packetGuard ? "true" : "false") + ",");
+        sb.AppendLine("  \"packetThreshold\": " + c.packetThreshold + ",");
+        sb.AppendLine("  \"packetWindowSeconds\": " + c.packetWindowSeconds);
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -533,6 +656,9 @@ public class TKAntiFloodConfig
         c.banMinutes = GetInt(json, "banMinutes", c.banMinutes);
         c.whitelist = GetString(json, "whitelist", c.whitelist);
         c.blockLogIntervalSeconds = GetInt(json, "blockLogIntervalSeconds", c.blockLogIntervalSeconds);
+        c.packetGuard = GetBool(json, "packetGuard", c.packetGuard);
+        c.packetThreshold = GetInt(json, "packetThreshold", c.packetThreshold);
+        c.packetWindowSeconds = GetInt(json, "packetWindowSeconds", c.packetWindowSeconds);
         if (c.maxAttempts < 2) c.maxAttempts = 2;
         if (c.windowSeconds < 1) c.windowSeconds = 1;
         if (c.blockLogIntervalSeconds < 5) c.blockLogIntervalSeconds = 5;

@@ -1582,7 +1582,7 @@ var PLUG_SUITE = [
 var PLUG_CFG = {
   'TKGhost': [['enabled','b','Activé'],['ghostAfterMinutes','n','Fantôme après (min d’immobilité)'],['playerRadiusMeters','n','Rayon joueurs (m)'],['checkIntervalSeconds','n','Période de contrôle (s)']],
   'TKDynamicFps': [['enabled','b','FPS adaptatif activé'],['idleFps','n','FPS serveur vide'],['minPlayersFps','n','FPS de base (avec joueurs)'],['maxFps','n','FPS maximum'],['cpuLowPercent','n','CPU bas (%) : monte les FPS'],['cpuHighPercent','n','CPU haut (%) : baisse les FPS']],
-  'TKAntiFlood': [['enabled','b','Activé'],['maxAttempts','n','Connexions max par fenêtre'],['windowSeconds','n','Fenêtre (s)'],['banMinutes','n','Durée du ban (min, 0 = permanent)'],['whitelist','s','IP jamais bloquées (virgules)']],
+  'TKAntiFlood': [['enabled','b','Activé'],['maxAttempts','n','Connexions max par fenêtre'],['windowSeconds','n','Fenêtre (s)'],['banMinutes','n','Durée du ban (min, 0 = permanent)'],['packetGuard','b','Garde anti-paquets malformés (auto-ban)'],['packetThreshold','n','Paquets malformés tolérés / IP'],['whitelist','s','IP jamais bloquées (virgules)']],
   'TKAntiCheat': [['moneyAlertThreshold','n','Alerte argent au-delà de (€)'],['maxSpeed','n','Vitesse max au sol (m/s)'],['spamThreshold','n','Anti-spam : actions max'],['spamWindowSeconds','n','Anti-spam : fenêtre (s)'],['adminWhitelist','s','Liste blanche admins (SteamID64, virgules)']]
 };
 function plugInfo(i, present){
