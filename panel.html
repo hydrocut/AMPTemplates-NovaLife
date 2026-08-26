@@ -118,7 +118,7 @@ input:focus{outline:none;border-color:var(--accent)}
 .pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
 .plugitem{display:flex;justify-content:space-between;gap:8px;background:#0f1420;border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
 .plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem .pd{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}
 .gl{width:64px;text-align:right;font-size:12px}
 button.chip{display:inline-flex;align-items:center;gap:6px;min-width:200px;justify-content:flex-start;padding:6px 12px}
 button.chip img{width:26px;height:26px;object-fit:contain}
@@ -1483,25 +1483,31 @@ function acToggle(key, val){
 }
 
 // --- Plugins du serveur ---
+var PLUG_SUITE = [
+  ['TKWebPanel.dll','Panel web d\u2019administration : joueurs, \u00e9conomie, v\u00e9hicules, chat, journal, s\u00e9curit\u00e9\u2026 (celui que vous utilisez).'],
+  ['TKAntiCheat.dll','Anti-cheat & anti-Akayro : alerte sur argent anormal, t\u00e9l\u00e9port/vitesse, protection des comptes admin, anti-spam commandes.'],
+  ['TKAntiFlood.dll','Protection anti-flood : bloque et bannit les IP qui spamment les connexions (protection DoS).'],
+  ['TKDynamicFps.dll','FPS adaptatif du serveur : baisse les FPS \u00e0 vide, remonte jusqu\u2019\u00e0 60 selon joueurs et CPU.'],
+  ['TKGhost.dll','Optimisation : passe en \u00ab fant\u00f4me \u00bb les v\u00e9hicules immobiles et isol\u00e9s pour soulager les FPS des joueurs.'],
+  ['TKConnectLog.dll','Journal des connexions : historique des arriv\u00e9es/d\u00e9parts des joueurs.'],
+  ['TeamKitIntro.dll','\u00c9cran d\u2019intro TeamKit \u00e0 la connexion des joueurs.']
+];
+function plugInfo(i, present){
+  var sd = PLUG_SUITE[i];
+  openModal('<h3><span class="pdot ' + (present?'on':'off') + '" style="margin-right:8px"></span>' + sd[0].replace('.dll','') + '</h3>'
+    + '<p style="margin:10px 0;line-height:1.5">' + sd[1] + '</p>'
+    + '<p class="muted" style="font-size:12px">' + (present?'Pr\u00e9sent sur le serveur':'Absent du serveur \u2014 sera r\u00e9install\u00e9 par la prochaine mise \u00e0 jour AMP') + '</p>');
+}
 function loadPlugins(){
   api('plugins').then(function(r){
     if(r.error) return;
     var all = {};
     (r.teamkit||[]).concat(r.others||[]).forEach(function(pl){ all[pl.name] = pl; });
-    var suite = [
-      ['TKWebPanel.dll','Panel web d\u2019administration'],
-      ['TKAntiCheat.dll','Anti-cheat & anti-Akayro'],
-      ['TKAntiFlood.dll','Protection anti-flood connexions'],
-      ['TKDynamicFps.dll','FPS adaptatif du serveur'],
-      ['TKGhost.dll','V\u00e9hicules fant\u00f4mes (optimisation)'],
-      ['TKConnectLog.dll','Journal des connexions'],
-      ['TeamKitIntro.dll','\u00c9cran d\u2019intro TeamKit']
-    ];
-    var tk = suite.map(function(sd){
+    var tk = PLUG_SUITE.map(function(sd, i){
       var pl = all[sd[0]]; delete all[sd[0]];
-      return '<div class="plugitem"><span class="pdot ' + (pl?'on':'off') + '"></span>'
+      return '<div class="plugitem clickable" onclick="plugInfo(' + i + ',' + (pl?1:0) + ')">'
+        + '<span class="pdot ' + (pl?'on':'off') + '"></span>'
         + '<span class="pn">' + sd[0].replace('.dll','') + '</span>'
-        + '<span class="pd">' + sd[1] + '</span>'
         + '<span class="pm">' + (pl?'pr\u00e9sent':'absent') + '</span></div>';
     }).join('');
     var names = Object.keys(all).sort();
