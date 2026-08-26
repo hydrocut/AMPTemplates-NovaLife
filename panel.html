@@ -118,7 +118,7 @@ input:focus{outline:none;border-color:var(--accent)}
 .pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
 .plugitem{display:flex;justify-content:space-between;gap:8px;background:#0f1420;border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
 .plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem .pd{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}
 .gl{width:64px;text-align:right;font-size:12px}
 button.chip{display:inline-flex;align-items:center;gap:6px;min-width:200px;justify-content:flex-start;padding:6px 12px}
 button.chip img{width:26px;height:26px;object-fit:contain}
@@ -1486,14 +1486,32 @@ function acToggle(key, val){
 function loadPlugins(){
   api('plugins').then(function(r){
     if(r.error) return;
-    function render(list){
-      if(!list.length) return '<span class="muted">Aucun</span>';
-      return list.map(function(pl){
-        return '<div class="plugitem"><span class="pn">' + esc(pl.name) + '</span><span class="pm">' + (pl.sizeKb>=1024?(pl.sizeKb/1024).toFixed(1)+' Mo':pl.sizeKb+' Ko') + '</span></div>';
-      }).join('');
-    }
-    document.getElementById('plugins-tk').innerHTML = render(r.teamkit);
-    document.getElementById('plugins-other').innerHTML = render(r.others);
+    var all = {};
+    (r.teamkit||[]).concat(r.others||[]).forEach(function(pl){ all[pl.name] = pl; });
+    var suite = [
+      ['TKWebPanel.dll','Panel web d\u2019administration'],
+      ['TKAntiCheat.dll','Anti-cheat & anti-Akayro'],
+      ['TKAntiFlood.dll','Protection anti-flood connexions'],
+      ['TKDynamicFps.dll','FPS adaptatif du serveur'],
+      ['TKGhost.dll','V\u00e9hicules fant\u00f4mes (optimisation)'],
+      ['TKConnectLog.dll','Journal des connexions'],
+      ['TeamKitIntro.dll','\u00c9cran d\u2019intro TeamKit']
+    ];
+    var tk = suite.map(function(sd){
+      var pl = all[sd[0]]; delete all[sd[0]];
+      return '<div class="plugitem"><span class="pdot ' + (pl?'on':'off') + '"></span>'
+        + '<span class="pn">' + sd[0].replace('.dll','') + '</span>'
+        + '<span class="pd">' + sd[1] + '</span>'
+        + '<span class="pm">' + (pl?'pr\u00e9sent':'absent') + '</span></div>';
+    }).join('');
+    var names = Object.keys(all).sort();
+    var rest = names.map(function(n){
+      var pl = all[n];
+      return '<div class="plugitem"><span class="pn">' + esc(n.replace('.dll','')) + '</span>'
+        + '<span class="pm">' + (pl.sizeKb>=1024?(pl.sizeKb/1024).toFixed(1)+' Mo':pl.sizeKb+' Ko') + '</span></div>';
+    }).join('');
+    document.getElementById('plugins-tk').innerHTML = tk;
+    document.getElementById('plugins-other').innerHTML = rest || '<span class="muted">Aucun</span>';
   }).catch(function(){});
 }
 
