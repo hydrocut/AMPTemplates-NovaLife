@@ -110,6 +110,15 @@ input:focus{outline:none;border-color:var(--accent)}
 .modal .box button{display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 12px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
 .dot.on{background:var(--ok)}.dot.off{background:#555}
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;padding:6px 0}
+.switch .sw{width:40px;height:22px;border-radius:12px;background:#39435c;position:relative;transition:.2s;flex:none}
+.switch .sw::after{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s}
+.switch.on .sw{background:var(--ok)}
+.switch.on .sw::after{left:21px}
+.pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
+.plugitem{display:flex;justify-content:space-between;gap:8px;background:#0f1420;border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
+.plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}
 .gl{width:64px;text-align:right;font-size:12px}
 button.chip{display:inline-flex;align-items:center;gap:6px;min-width:200px;justify-content:flex-start;padding:6px 12px}
 button.chip img{width:26px;height:26px;object-fit:contain}
@@ -317,6 +326,14 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
+  <section data-tab="monde">
+    <h2>Plugins du serveur</h2>
+    <h3 style="font-size:13px;color:var(--accent);margin:4px 0 2px">⭐ Plugins TeamKit</h3>
+    <div id="plugins-tk" class="pluglist"><span class="muted">Chargement…</span></div>
+    <h3 style="font-size:13px;color:var(--muted);margin:14px 0 2px">Autres plugins</h3>
+    <div id="plugins-other" class="pluglist"><span class="muted">Chargement…</span></div>
+  </section>
+
   <section data-tab="monde" class="need-owner">
     <h2>Sauvegardes de la base <span class="muted" style="font-weight:400;font-size:12px">— à chaud, sans couper le serveur · auto toutes les 6 h, gardées 14 jours</span></h2>
     <div class="row" style="margin-bottom:10px">
@@ -358,6 +375,11 @@ button.chip img{width:26px;height:26px;object-fit:contain}
       <select id="act-days" onchange="actLoadDay()" style="margin-left:auto"><option value="">Aujourd'hui (direct)</option></select>
     </div>
     <div id="act-box"><p class="muted">Chargement…</p></div>
+  </section>
+
+  <section data-tab="securite" class="need-owner">
+    <h2>Protection anti-triche & anti-Akayro <span class="muted" style="font-weight:400;font-size:12px">— réglages (propriétaire)</span></h2>
+    <div id="ac-config">Chargement…</div>
   </section>
 
   <section data-tab="securite">
@@ -967,7 +989,8 @@ function showTab(name){
   });
   localStorage.setItem('tkweb_tab', name);
   if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3) loadPanelUsers(); }
-  if(name === 'monde' && myLevel() >= 3) loadBackups();
+  if(name === 'monde'){ loadPlugins(); if(myLevel() >= 3) loadBackups(); }
+  if(name === 'securite' && myLevel() >= 3) loadAcConfig();
   if(name === 'chat') chatScrollBottom();
 }
 
@@ -1435,6 +1458,44 @@ function renderBizs(){
   }).join('');
 }
 
+
+// --- Reglages anti-cheat (owner) ---
+function loadAcConfig(){
+  api('acconfig').then(function(c){
+    var el = document.getElementById('ac-config');
+    if(c.error){ el.innerHTML = '<span class="muted">' + esc(c.error) + '</span>'; return; }
+    function sw(key, label, val, hint){
+      return '<div class="switch' + (val ? ' on' : '') + '" onclick="acToggle(\'' + key + '\',' + (val?0:1) + ')">' +
+        '<span class="sw"></span><span>' + label + (hint ? ' <span class="muted" style="font-weight:400">' + hint + '</span>' : '') + '</span></div>';
+    }
+    el.innerHTML =
+      sw('adminProtection', 'Protection des comptes admin', c.adminProtection, '— alerte si un joueur obtient admin sans autorisation') +
+      sw('adminAutoReset', 'Retrait automatique des droits', c.adminAutoReset, '— retire aussitôt l’admin non autorisé (recommandé après vérif)') +
+      sw('spamKick', 'Kick auto des spammeurs', c.spamKick, '— commandes/chat en rafale') +
+      sw('enabled', 'Anti-cheat activé (global)', c.enabled, '') +
+      '<div class="muted" style="margin-top:8px;font-size:12px">' + c.whitelistCount + ' admin(s) en liste blanche · argent alerte > ' + Number(c.moneyThreshold).toLocaleString('fr-FR') + ' · vitesse max ' + c.maxSpeed + ' m/s · modifs appliquées sous ~20 s</div>';
+  }).catch(function(){});
+}
+function acToggle(key, val){
+  api('acset', {key: key, value: val ? true : false}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Réglage enregistré (actif sous ~20 s)'); loadAcConfig(); }
+  });
+}
+
+// --- Plugins du serveur ---
+function loadPlugins(){
+  api('plugins').then(function(r){
+    if(r.error) return;
+    function render(list){
+      if(!list.length) return '<span class="muted">Aucun</span>';
+      return list.map(function(pl){
+        return '<div class="plugitem"><span class="pn">' + esc(pl.name) + '</span><span class="pm">' + (pl.sizeKb>=1024?(pl.sizeKb/1024).toFixed(1)+' Mo':pl.sizeKb+' Ko') + '</span></div>';
+      }).join('');
+    }
+    document.getElementById('plugins-tk').innerHTML = render(r.teamkit);
+    document.getElementById('plugins-other').innerHTML = render(r.others);
+  }).catch(function(){});
+}
 
 // --- Sauvegardes (owner) ---
 function loadBackups(){

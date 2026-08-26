@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.3 — TeamKit.fr
+/// TKAntiCheat v1.4 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -64,7 +64,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.3 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.4 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -81,7 +81,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.3 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.4 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -305,6 +305,32 @@ public class TKAntiCheat : Plugin
             {
                 adminWhitelist.Add(id);
             }
+        }
+    }
+
+    // Relecture à chaud de la config (appelée périodiquement par le ticker)
+    private string lastConfigJson;
+    public void ReloadConfig()
+    {
+        try
+        {
+            string configPath = Path.Combine(pluginDir, "config.json");
+            if (!File.Exists(configPath))
+            {
+                return;
+            }
+            string json = File.ReadAllText(configPath);
+            if (json == lastConfigJson)
+            {
+                return; // rien n'a changé
+            }
+            lastConfigJson = json;
+            config = TKAntiCheatConfig.FromJson(json);
+            BuildAdminWhitelist();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKAC] Erreur relecture config : " + ex.Message);
         }
     }
 
@@ -534,9 +560,19 @@ public class TKAntiCheatTicker : MonoBehaviour
     public TKAntiCheat plugin;
     public int intervalSeconds = 1;
     private float accum;
+    private float reloadAccum;
 
     private void Update()
     {
+        // relit la config toutes les 20 s pour appliquer à chaud les réglages
+        // changés depuis le panel (protection admin, retrait auto, anti-spam)
+        reloadAccum += Time.unscaledDeltaTime;
+        if (reloadAccum >= 20f)
+        {
+            reloadAccum = 0f;
+            try { plugin.ReloadConfig(); } catch { }
+        }
+
         accum += Time.unscaledDeltaTime;
         if (accum < intervalSeconds)
         {

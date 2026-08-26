@@ -327,7 +327,7 @@ public class TKWebPanel : Plugin
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
             StartAutoBackup();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.8.3 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.9 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -687,6 +687,8 @@ public class TKWebPanel : Plugin
             case "/api/paneluserdel":
             case "/api/backups":
             case "/api/backupnow":
+            case "/api/acconfig":
+            case "/api/acset":
                 return 3;
             // modo autorisé (consultation + modération légère)
             case "/api/status":
@@ -800,6 +802,10 @@ public class TKWebPanel : Plugin
                 return ApiBring(body);
             case "/api/accheck":
                 return ApiAntiCheat();
+            case "/api/acconfig":
+                return ApiAcConfig();
+            case "/api/acset":
+                return ApiAcSet(body);
             case "/api/history":
                 return ApiHistory();
             case "/api/offlineinv":
@@ -860,6 +866,8 @@ public class TKWebPanel : Plugin
                 return ApiPanelUserDel(body);
             case "/api/ghoststats":
                 return (string)RunOnMain(ApiGhostStats);
+            case "/api/plugins":
+                return ApiPlugins();
             case "/api/backups":
                 return ApiBackups();
             case "/api/backupnow":
@@ -2658,6 +2666,48 @@ public class TKWebPanel : Plugin
         t.Start();
     }
 
+    // Liste des plugins (.dll) du serveur : TeamKit + autres
+    private string ApiPlugins()
+    {
+        string dir = Path.GetDirectoryName(pluginDir); // .../Plugins
+        StringBuilder tk = new StringBuilder("[");
+        StringBuilder other = new StringBuilder("[");
+        bool ftk = true, fo = true;
+        try
+        {
+            List<string> files = new List<string>(Directory.GetFiles(dir, "*.dll", SearchOption.TopDirectoryOnly));
+            files.Sort();
+            foreach (string f in files)
+            {
+                string fname = Path.GetFileName(f);
+                bool isTk = fname.StartsWith("TK", StringComparison.OrdinalIgnoreCase);
+                FileInfo fi = new FileInfo(f);
+                string entry = "{\"name\":" + Json.Str(fname)
+                    + ",\"sizeKb\":" + (fi.Length / 1024L)
+                    + ",\"date\":" + Json.Str(fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm")) + "}";
+                if (isTk)
+                {
+                    if (!ftk) tk.Append(",");
+                    ftk = false;
+                    tk.Append(entry);
+                }
+                else
+                {
+                    if (!fo) other.Append(",");
+                    fo = false;
+                    other.Append(entry);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+        tk.Append("]");
+        other.Append("]");
+        return "{\"teamkit\":" + tk + ",\"others\":" + other + "}";
+    }
+
     private class HeavyAreaRow
     {
         public int AreaId { get; set; }
@@ -3377,6 +3427,82 @@ public class TKWebPanel : Plugin
         SavePanelUsers();
         Debug.Log("[TKWEB] PANELUSER suppression nom=" + name);
         return "{\"ok\":true}";
+    }
+
+    private string AcConfigPath()
+    {
+        return Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiCheat"), "config.json");
+    }
+
+    private string ApiAcConfig()
+    {
+        try
+        {
+            string f = AcConfigPath();
+            if (!File.Exists(f))
+            {
+                return "{\"error\":\"TKAntiCheat non installé\"}";
+            }
+            string json = File.ReadAllText(f);
+            string wl = "";
+            Match m = Regex.Match(json, "\"adminWhitelist\"\\s*:\\s*\"(?<v>(?:\\\\.|[^\"])*)\"");
+            if (m.Success) wl = m.Groups["v"].Value;
+            int wlCount = 0;
+            foreach (string x in wl.Split(','))
+            {
+                if (x.Trim().Length > 0) wlCount++;
+            }
+            StringBuilder sb = new StringBuilder("{");
+            sb.Append("\"adminProtection\":").Append(Json.GetBool(json, "adminProtection", true) ? "true" : "false");
+            sb.Append(",\"adminAutoReset\":").Append(Json.GetBool(json, "adminAutoReset", false) ? "true" : "false");
+            sb.Append(",\"spamEnabled\":").Append(Json.GetBool(json, "spamEnabled", true) ? "true" : "false");
+            sb.Append(",\"spamKick\":").Append(Json.GetBool(json, "spamKick", true) ? "true" : "false");
+            sb.Append(",\"enabled\":").Append(Json.GetBool(json, "enabled", true) ? "true" : "false");
+            sb.Append(",\"moneyThreshold\":").Append(Json.GetInt(json, "moneyAlertThreshold", 500000));
+            sb.Append(",\"maxSpeed\":").Append(Json.GetInt(json, "maxSpeed", 30));
+            sb.Append(",\"whitelistCount\":").Append(wlCount);
+            sb.Append(",\"whitelist\":").Append(Json.Str(wl));
+            sb.Append("}");
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    private string ApiAcSet(string body)
+    {
+        string key = Json.GetString(body, "key", "");
+        bool value = Json.GetBool(body, "value", false);
+        string[] allowed = { "adminProtection", "adminAutoReset", "spamEnabled", "spamKick", "enabled" };
+        if (Array.IndexOf(allowed, key) < 0)
+        {
+            return "{\"error\":\"réglage inconnu\"}";
+        }
+        try
+        {
+            string f = AcConfigPath();
+            if (!File.Exists(f))
+            {
+                return "{\"error\":\"TKAntiCheat non installé\"}";
+            }
+            string json = File.ReadAllText(f);
+            string repl = "\"" + key + "\": " + (value ? "true" : "false");
+            string updated = Regex.Replace(json, "\"" + key + "\"\\s*:\\s*(true|false)", repl);
+            if (updated == json && !Regex.IsMatch(json, "\"" + key + "\"\\s*:"))
+            {
+                return "{\"error\":\"clé absente du fichier\"}";
+            }
+            File.WriteAllText(f, updated);
+            StaffLog("réglage anti-cheat " + key + " = " + (value ? "activé" : "désactivé"));
+            Debug.Log("[TKWEB] ACSET " + key + "=" + value + " (pris en compte sous ~20 s)");
+            return "{\"ok\":true}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
     }
 
     private string ApiAntiCheat()
