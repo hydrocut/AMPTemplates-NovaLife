@@ -536,6 +536,42 @@ var playersCache = [];
 
 var refreshTick = 0;
 
+function fmtDate(u){ return u>0 ? new Date(u*1000).toLocaleString('fr-FR') : '—'; }
+function openIdentity(steamId, pseudo){
+  api('identity?steamId=' + encodeURIComponent(steamId)).then(function(r){
+    if(r.error){ toast(r.error, true); return; }
+    var h = '<h3>🔎 ' + esc(pseudo || steamId) + '</h3>' +
+      '<p class="muted mono" style="font-size:12px">SteamID ' + esc(steamId) + '</p>';
+    if(!r.ips.length){ h += '<p class="muted">Aucune IP enregistrée (le joueur doit s’être connecté depuis l’activation du journal).</p>'; }
+    else {
+      h += '<div class="tblwrap"><table><thead><tr><th>Adresse IP</th><th>Autres comptes</th><th>Vue la 1re fois</th><th>Dernière fois</th></tr></thead><tbody>';
+      r.ips.sort(function(a,b){ return b.last - a.last; }).forEach(function(ip){
+        h += '<tr><td><a href="#" onclick="openIdentityIp(\'' + ip.ip + '\');return false" class="mono">' + esc(ip.ip) + '</a></td>' +
+          '<td>' + (ip.shared>0 ? '<span class="badge" style="color:var(--warn,#e3b341)">' + ip.shared + ' autre(s)</span>' : '<span class="muted">—</span>') + '</td>' +
+          '<td>' + fmtDate(ip.first) + '</td><td>' + fmtDate(ip.last) + '</td></tr>';
+      });
+      h += '</tbody></table></div><p class="muted" style="font-size:12px">Clique une IP pour voir tous les comptes vus depuis cette adresse (détection d’alts).</p>';
+    }
+    openModal(h, true);
+  });
+}
+function openIdentityIp(ip){
+  api('identity?ip=' + encodeURIComponent(ip)).then(function(r){
+    if(r.error){ toast(r.error, true); return; }
+    var h = '<h3>🔎 IP <span class="mono">' + esc(r.ip) + '</span></h3>';
+    if(!r.accounts.length){ h += '<p class="muted">Aucun compte enregistré sur cette IP.</p>'; }
+    else {
+      h += '<p class="muted" style="font-size:12px">' + r.accounts.length + ' compte(s) vu(s) depuis cette IP' + (r.accounts.length>1 ? ' — possibles alts / même foyer' : '') + '</p>';
+      h += '<div class="tblwrap"><table><thead><tr><th>Compte</th><th>SteamID</th><th>1re fois</th><th>Dernière</th></tr></thead><tbody>';
+      r.accounts.sort(function(a,b){ return b.last - a.last; }).forEach(function(a){
+        h += '<tr><td><a href="#" onclick="openIdentity(\'' + a.steamId + '\',\'' + esc(a.username||'') + '\');return false">' + esc(a.username||'?') + '</a></td>' +
+          '<td class="mono">' + esc(a.steamId) + '</td><td>' + fmtDate(a.first) + '</td><td>' + fmtDate(a.last) + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+    }
+    openModal(h, true);
+  });
+}
 function playerActions(id){
   var pl = playersCache.filter(function(p){ return p.steamId === id; })[0];
   var who = pl ? pl.pseudo : id;
@@ -552,6 +588,7 @@ function playerActions(id){
   b += '<button onclick="closeModal();localMsgPlayer(\'' + id + '\')">📍 Message local</button>';
   b += '<button class="danger" onclick="closeModal();kickPlayer(\'' + id + '\')">Kick</button>';
   b += '<button class="danger" onclick="closeModal();if(confirm(\'Bannir l’IP de ce joueur ? Il sera déconnecté et son IP bloquée définitivement au niveau réseau.\'))banIp(\'' + id + '\')">Ban IP</button>';
+  b += '<button onclick="closeModal();openIdentity(\'' + id + '\',\'' + esc(who) + '\')">🔎 Identités & IP</button>';
   b += '<button class="danger" onclick="closeModal();banPlayer(\'' + id + '\')">Ban</button>';
   openModal('<h3>' + esc(who) + '</h3>' + b);
 }
@@ -562,6 +599,7 @@ function histActions(cid, steamId, banned){
   b += '<button onclick="closeModal();playerCard(' + cid + ',\'' + esc(username) + '\')">📇 Fiche complète</button>';
   b += '<button onclick="closeModal();offInv(' + cid + ',\'' + esc(username) + '\')">Inventaire</button>';
   b += '<button onclick="closeModal();offGarage(' + cid + ',\'' + esc(username) + '\',\'' + steamId + '\')">Garage</button>';
+  b += '<button onclick="closeModal();openIdentity(\'' + steamId + '\',\'' + esc(username) + '\')">🔎 Identités & IP</button>';
   if(banned) b += '<button onclick="closeModal();histUnban(\'' + steamId + '\')">Débannir</button>';
   else b += '<button class="danger" onclick="closeModal();histBan(\'' + steamId + '\')">Ban</button>';
   openModal('<h3>' + esc(username) + '</h3>' + b);

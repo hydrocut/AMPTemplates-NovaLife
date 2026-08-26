@@ -328,7 +328,8 @@ public class TKWebPanel : Plugin
             LoadPanelUsers();
             StartAutoBackup();
         StartSericache();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.14 initialisé — panel sur le port " + port);
+        StartIdentityLogger();
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.15 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -703,6 +704,8 @@ public class TKWebPanel : Plugin
             case "/api/benchreal":
             case "/api/benchclear":
             case "/api/benchstatus":
+            case "/api/banip":
+            case "/api/identity":
                 return 3;
             // modo autorisé (consultation + modération légère)
             case "/api/status":
@@ -828,6 +831,8 @@ public class TKWebPanel : Plugin
                 return ApiAcWl(body);
             case "/api/banip":
                 return ApiBanIp(body);
+            case "/api/identity":
+                return ApiIdentity(ctx.Request.QueryString["steamId"], ctx.Request.QueryString["ip"]);
             case "/api/benchspawn":
                 return ApiBenchSpawn(body);
             case "/api/benchghost":
@@ -4285,6 +4290,177 @@ public class TKWebPanel : Plugin
         catch (Exception ex)
         {
             return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Journal d'identité IP <-> SteamID (v2.15). Un thread de fond note
+    // toutes les 20 s le (steamId, pseudo, IP) de chaque joueur en ligne.
+    // Permet de croiser : les IP d'un compte, et les comptes vus sur une IP
+    // (détection d'alts et de contournements de ban). identities.tsv :
+    // steamId \t pseudo \t ip \t premierVu(unix) \t dernierVu(unix)
+    // ------------------------------------------------------------------
+    private class IdentIp { public long first; public long last; }
+    private class Ident { public string name; public Dictionary<string, IdentIp> ips = new Dictionary<string, IdentIp>(); }
+    private readonly Dictionary<string, Ident> identities = new Dictionary<string, Ident>();
+    private readonly object identLock = new object();
+    private bool identDirty;
+
+    private string IdentPath() { return Path.Combine(pluginDir, "identities.tsv"); }
+
+    private static long NowUnix()
+    {
+        return (long)(DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+    }
+
+    private static string NormIp(string a)
+    {
+        if (string.IsNullOrEmpty(a)) return null;
+        if (a.StartsWith("::ffff:")) a = a.Substring(7);
+        int c = a.LastIndexOf(':');
+        if (c > 0 && a.IndexOf('.') > 0 && c > a.IndexOf('.')) a = a.Substring(0, c);
+        return a;
+    }
+
+    private void LoadIdentities()
+    {
+        try
+        {
+            if (!File.Exists(IdentPath())) return;
+            foreach (string line in File.ReadAllLines(IdentPath()))
+            {
+                string[] p = line.Split('\t');
+                if (p.Length < 5) continue;
+                string sid = p[0].Trim();
+                if (sid.Length == 0) continue;
+                Ident id;
+                if (!identities.TryGetValue(sid, out id)) { id = new Ident(); identities[sid] = id; }
+                id.name = p[1];
+                long f, l;
+                long.TryParse(p[3], out f); long.TryParse(p[4], out l);
+                id.ips[p[2]] = new IdentIp { first = f, last = l };
+            }
+        }
+        catch (Exception ex) { Debug.LogError("[TKWEB] Lecture identities.tsv : " + ex.Message); }
+    }
+
+    private void SaveIdentities()
+    {
+        try
+        {
+            StringBuilder sb = new StringBuilder();
+            lock (identLock)
+            {
+                foreach (KeyValuePair<string, Ident> kv in identities)
+                    foreach (KeyValuePair<string, IdentIp> ip in kv.Value.ips)
+                        sb.Append(kv.Key).Append('\t').Append((kv.Value.name ?? "").Replace('\t', ' ').Replace('\n', ' '))
+                          .Append('\t').Append(ip.Key).Append('\t').Append(ip.Value.first).Append('\t').Append(ip.Value.last).Append('\n');
+            }
+            File.WriteAllText(IdentPath(), sb.ToString());
+        }
+        catch (Exception ex) { Debug.LogError("[TKWEB] Ecriture identities.tsv : " + ex.Message); }
+    }
+
+    private void StartIdentityLogger()
+    {
+        LoadIdentities();
+        Thread t = new Thread(delegate ()
+        {
+            Thread.Sleep(30 * 1000);
+            while (true)
+            {
+                try
+                {
+                    object snap = RunOnMain(delegate
+                    {
+                        List<string> rows = new List<string>();
+                        if (Nova.server != null)
+                        {
+                            foreach (Player p in Nova.server.GetAllPlayers())
+                            {
+                                if (p == null || p.steamId == 0) continue;
+                                string ip = null;
+                                try { NetworkConnectionToClient c = p.conn as NetworkConnectionToClient; ip = c != null ? c.address : null; } catch { }
+                                ip = NormIp(ip);
+                                if (string.IsNullOrEmpty(ip)) continue;
+                                rows.Add(p.steamId + "\t" + (p.steamUsername ?? "") + "\t" + ip);
+                            }
+                        }
+                        return (object)rows;
+                    });
+                    List<string> list = (List<string>)snap;
+                    if (list != null && list.Count > 0)
+                    {
+                        long now = NowUnix();
+                        lock (identLock)
+                        {
+                            foreach (string r in list)
+                            {
+                                string[] pr = r.Split('\t');
+                                if (pr.Length < 3) continue;
+                                Ident id;
+                                if (!identities.TryGetValue(pr[0], out id)) { id = new Ident(); identities[pr[0]] = id; identDirty = true; }
+                                if (pr[1].Length > 0 && id.name != pr[1]) { id.name = pr[1]; identDirty = true; }
+                                IdentIp e;
+                                if (!id.ips.TryGetValue(pr[2], out e)) { e = new IdentIp { first = now, last = now }; id.ips[pr[2]] = e; identDirty = true; }
+                                else { e.last = now; }
+                            }
+                        }
+                        if (identDirty) { identDirty = false; SaveIdentities(); }
+                    }
+                }
+                catch (Exception ex) { Debug.LogError("[TKWEB] Journal identité : " + ex.Message); }
+                Thread.Sleep(20 * 1000);
+            }
+        });
+        t.IsBackground = true;
+        t.Start();
+        Debug.Log("[TKWEB] Journal identité IP<->SteamID actif");
+    }
+
+    private string ApiIdentity(string steamId, string ip)
+    {
+        lock (identLock)
+        {
+            if (!string.IsNullOrEmpty(ip))
+            {
+                string want = NormIp(ip.Trim());
+                StringBuilder sb = new StringBuilder("{\"ip\":" + Json.Str(want) + ",\"accounts\":[");
+                bool first = true;
+                foreach (KeyValuePair<string, Ident> kv in identities)
+                {
+                    IdentIp e;
+                    if (!kv.Value.ips.TryGetValue(want, out e)) continue;
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append("{\"steamId\":").Append(Json.Str(kv.Key));
+                    sb.Append(",\"username\":").Append(Json.Str(kv.Value.name ?? ""));
+                    sb.Append(",\"first\":").Append(e.first).Append(",\"last\":").Append(e.last).Append("}");
+                }
+                sb.Append("]}");
+                return sb.ToString();
+            }
+            string sid = (steamId ?? "").Trim();
+            Ident id;
+            if (!identities.TryGetValue(sid, out id))
+            {
+                return "{\"steamId\":" + Json.Str(sid) + ",\"username\":\"\",\"ips\":[]}";
+            }
+            StringBuilder sb2 = new StringBuilder("{\"steamId\":" + Json.Str(sid) + ",\"username\":" + Json.Str(id.name ?? "") + ",\"ips\":[");
+            bool f2 = true;
+            foreach (KeyValuePair<string, IdentIp> ipkv in id.ips)
+            {
+                int shared = 0;
+                foreach (KeyValuePair<string, Ident> other in identities)
+                    if (other.Key != sid && other.Value.ips.ContainsKey(ipkv.Key)) shared++;
+                if (!f2) sb2.Append(",");
+                f2 = false;
+                sb2.Append("{\"ip\":").Append(Json.Str(ipkv.Key));
+                sb2.Append(",\"first\":").Append(ipkv.Value.first).Append(",\"last\":").Append(ipkv.Value.last);
+                sb2.Append(",\"shared\":").Append(shared).Append("}");
+            }
+            sb2.Append("]}");
+            return sb2.ToString();
         }
     }
 
