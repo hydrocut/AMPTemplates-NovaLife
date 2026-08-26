@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.4 — TeamKit.fr
+/// TKAntiCheat v1.5 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -64,7 +64,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.4 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.5 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -81,7 +81,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.4 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.5 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -380,7 +380,8 @@ public class TKAntiCheat : Plugin
                 adminLastAlert[p.steamId] = now;
                 Alert("ADMIN", SafePseudo(p), p.steamId,
                     "possède le niveau admin " + level + " sans être en liste blanche"
-                    + (config.adminAutoReset ? " — droits retirés" : ""));
+                    + (config.adminAutoReset ? " — droits retirés" : "")
+                    + (config.adminKick ? " — kick" : ""));
             }
 
             if (config.adminAutoReset)
@@ -395,6 +396,17 @@ public class TKAntiCheat : Plugin
                 catch (Exception ex)
                 {
                     Debug.LogError("[TKAC] Erreur retrait admin : " + ex.Message);
+                }
+            }
+
+            if (config.adminKick)
+            {
+                try
+                {
+                    p.Disconnect("Sécurité : niveau admin non autorisé détecté");
+                }
+                catch
+                {
                 }
             }
         }
@@ -620,6 +632,8 @@ public class TKAntiCheatConfig
     // Retirer automatiquement les droits d'un admin non listé (déconseillé
     // tant que la liste blanche n'est pas complète : mets d'abord tes staff)
     public bool adminAutoReset = false;
+    // Kick automatique du joueur détecté avec un niveau admin non autorisé
+    public bool adminKick = false;
     // Anti-spam de commandes/chat en jeu
     public bool spamEnabled = true;
     public int spamThreshold = 12;      // actions max sur la fenetre avant sanction
@@ -649,6 +663,7 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"adminProtection\": " + (c.adminProtection ? "true" : "false") + ",");
         sb.AppendLine("  \"adminWhitelist\": \"" + (c.adminWhitelist ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",");
         sb.AppendLine("  \"adminAutoReset\": " + (c.adminAutoReset ? "true" : "false") + ",");
+        sb.AppendLine("  \"adminKick\": " + (c.adminKick ? "true" : "false") + ",");
         sb.AppendLine("  \"spamEnabled\": " + (c.spamEnabled ? "true" : "false") + ",");
         sb.AppendLine("  \"spamThreshold\": " + c.spamThreshold + ",");
         sb.AppendLine("  \"spamWindowSeconds\": " + c.spamWindowSeconds + ",");
@@ -687,6 +702,7 @@ public class TKAntiCheatConfig
         Match aw = Regex.Match(json, @"""adminWhitelist""\s*:\s*""(?<v>(?:\\.|[^""])*)""");
         if (aw.Success) c.adminWhitelist = aw.Groups["v"].Value.Replace("\\\"", "\"").Replace("\\\\", "\\");
         c.adminAutoReset = GetBool(json, "adminAutoReset", c.adminAutoReset);
+        c.adminKick = GetBool(json, "adminKick", c.adminKick);
         c.spamEnabled = GetBool(json, "spamEnabled", c.spamEnabled);
         c.spamThreshold = (int)GetDouble(json, "spamThreshold", c.spamThreshold);
         c.spamWindowSeconds = (int)GetDouble(json, "spamWindowSeconds", c.spamWindowSeconds);

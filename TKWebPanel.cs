@@ -328,7 +328,7 @@ public class TKWebPanel : Plugin
             LoadPanelUsers();
             StartAutoBackup();
         StartSericache();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.13 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.13.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -3531,6 +3531,7 @@ public class TKWebPanel : Plugin
             StringBuilder sb = new StringBuilder("{");
             sb.Append("\"adminProtection\":").Append(Json.GetBool(json, "adminProtection", true) ? "true" : "false");
             sb.Append(",\"adminAutoReset\":").Append(Json.GetBool(json, "adminAutoReset", false) ? "true" : "false");
+            sb.Append(",\"adminKick\":").Append(Json.GetBool(json, "adminKick", false) ? "true" : "false");
             sb.Append(",\"spamEnabled\":").Append(Json.GetBool(json, "spamEnabled", true) ? "true" : "false");
             sb.Append(",\"spamKick\":").Append(Json.GetBool(json, "spamKick", true) ? "true" : "false");
             sb.Append(",\"enabled\":").Append(Json.GetBool(json, "enabled", true) ? "true" : "false");
@@ -3551,7 +3552,7 @@ public class TKWebPanel : Plugin
     {
         string key = Json.GetString(body, "key", "");
         bool value = Json.GetBool(body, "value", false);
-        string[] allowed = { "adminProtection", "adminAutoReset", "spamEnabled", "spamKick", "enabled" };
+        string[] allowed = { "adminProtection", "adminAutoReset", "adminKick", "spamEnabled", "spamKick", "enabled" };
         if (Array.IndexOf(allowed, key) < 0)
         {
             return "{\"error\":\"réglage inconnu\"}";

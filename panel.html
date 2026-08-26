@@ -1510,6 +1510,7 @@ function loadAcConfig(){
     el.innerHTML =
       sw('adminProtection', 'Protection des comptes admin', c.adminProtection, '— alerte si un joueur obtient admin sans autorisation') +
       sw('adminAutoReset', 'Retrait automatique des droits', c.adminAutoReset, '— retire aussitôt l’admin non autorisé (recommandé après vérif)') +
+      sw('adminKick', 'Kick auto des faux admins', c.adminKick, '— éjecte le joueur détecté avec un niveau admin non autorisé') +
       sw('spamKick', 'Kick auto des spammeurs', c.spamKick, '— commandes/chat en rafale') +
       sw('enabled', 'Anti-cheat activé (global)', c.enabled, '') +
       '<div class="muted" style="margin-top:8px;font-size:12px">' + c.whitelistCount + ' admin(s) en liste blanche · argent alerte > ' + Number(c.moneyThreshold).toLocaleString('fr-FR') + ' · vitesse max ' + c.maxSpeed + ' m/s · modifs appliquées sous ~20 s</div>';
