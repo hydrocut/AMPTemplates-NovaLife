@@ -801,17 +801,19 @@ function refresh(){
 
   api('accheck').then(function(list){
     var tb = document.getElementById('accheck');
+    list = (list || []).filter(function(a){ return !acDismissed || !acDismissed.has(a.time + '|' + a.steamId); });
     if(!list.length){ tb.innerHTML = '<tr><td colspan="6" class="muted">Aucune détection</td></tr>'; return; }
-    var color = {ARGENT:'var(--warn)', TELEPORT:'var(--bad)', VITESSE:'var(--bad)', ITEMS:'var(--warn)', SPAM:'#c586ff', ADMIN:'#ff4d6d', ADMIN:'#ff3b3b'};
+    var color = {ARGENT:'var(--warn)', TELEPORT:'var(--bad)', VITESSE:'var(--bad)', ITEMS:'var(--warn)', SPAM:'#c586ff', ADMIN:'#ff3b3b', SPOOF:'#ff3b3b'};
     tb.innerHTML = list.slice(0,60).map(function(a){
       return '<tr>' +
         '<td class="mono muted">' + esc(a.time) + '</td>' +
         '<td><span class="badge" style="color:' + (color[a.kind]||'var(--muted)') + '">' + esc(a.kind) + '</span></td>' +
-        '<td>' + esc(a.pseudo) + '</td>' +
+        '<td>' + slinkSteam(a.steamId, a.pseudo || a.steamId) + '</td>' +
         '<td class="mono">' + esc(a.steamId) + '</td>' +
-        '<td>' + esc(a.detail) + '</td>' +
+        '<td>' + linkSteam(esc(a.detail)) + '</td>' +
         '<td class="actions">' +
-          '<button onclick="document.getElementById(\'ban-steamid\').value=\'' + esc(a.steamId) + '\';window.scrollTo(0,0)">→ Ban</button>' +
+          '<button title="Faux positif : masquer cette alerte" onclick="acDismiss(\'' + esc(a.time) + '\',\'' + esc(a.steamId) + '\',this)">✓ Faux positif</button>' +
+          '<button class="danger" onclick="document.getElementById(\'ban-steamid\').value=\'' + esc(a.steamId) + '\';window.scrollTo(0,0)">→ Ban</button>' +
         '</td></tr>';
     }).join('');
   }).catch(function(){});
@@ -2091,6 +2093,23 @@ function calClick(e){
 // Sécurité : nouvelles alertes anti-cheat non consultées (persisté par navigateur)
 // Admins (proprio) : admins pas encore validés en liste blanche
 var lastAlertsMax = '';
+var acDismissed = null;
+function loadAcDismissed(){
+  api('acdismissed').then(function(list){
+    if(Array.isArray(list)) acDismissed = new Set(list);
+  }).catch(function(){});
+}
+function acDismiss(time, steamId, btn){
+  api('acdismiss', {time: time, steamId: steamId}).then(function(r){
+    if(r.error){ toast(r.error, true); return; }
+    if(!acDismissed) acDismissed = new Set();
+    acDismissed.add(time + '|' + steamId);
+    var tr = btn && btn.closest ? btn.closest('tr') : null;
+    if(tr) tr.remove();
+    toast('Alerte masquée (faux positif)');
+    pollBadges();
+  });
+}
 function setNavBadge(tab, n){
   var btn = document.querySelector('#tabs button[data-nav="' + tab + '"]');
   if(!btn) return;
@@ -2108,12 +2127,14 @@ function markAlertsSeen(){
 }
 function pollBadges(){
   if(!auth) return;
+  if(acDismissed === null){ acDismissed = new Set(); loadAcDismissed(); }
   api('accheck').then(function(list){
     if(!Array.isArray(list)) return;
     var seen = '';
     try { seen = localStorage.getItem('tkweb_alerts_seen') || ''; } catch(e) {}
     var unseen = 0;
     list.forEach(function(a){
+      if(acDismissed && acDismissed.has(a.time + '|' + a.steamId)) return;
       if(a.time > lastAlertsMax) lastAlertsMax = a.time;
       if(a.time > seen) unseen++;
     });

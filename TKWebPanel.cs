@@ -329,7 +329,7 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.1.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -739,6 +739,7 @@ public class TKWebPanel : Plugin
             case "/api/ghoststats":
             case "/api/heavyareas":
             case "/api/floodbans":
+            case "/api/acdismissed":
             case "/api/admins":
                 return 1;
             // tout le reste : admin
@@ -842,6 +843,10 @@ public class TKWebPanel : Plugin
                 return ApiMapCalibGet();
             case "/api/mapvehicles":
                 return ApiMapVehicles();
+            case "/api/acdismissed":
+                return ApiAcDismissed();
+            case "/api/acdismiss":
+                return ApiAcDismiss(body);
             case "/api/banip":
                 return ApiBanIp(body);
             case "/api/identity":
@@ -4620,6 +4625,72 @@ public class TKWebPanel : Plugin
             sb.Append("]");
             return sb.ToString();
         });
+    }
+
+    // Alertes anti-cheat marquées « faux positif » depuis le panel : on ne
+    // touche pas au fichier de TKAntiCheat (il le réécrit), on garde une
+    // liste de clés "time|steamId" côté panel et le client filtre l'affichage.
+    private string AcDismissedPath() { return Path.Combine(pluginDir, "acdismissed.txt"); }
+
+    private string ApiAcDismissed()
+    {
+        try
+        {
+            if (!File.Exists(AcDismissedPath()))
+            {
+                return "[]";
+            }
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            foreach (string line in File.ReadAllLines(AcDismissedPath()))
+            {
+                string t = line.Trim();
+                if (t.Length == 0) continue;
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append(Json.Str(t));
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    private string ApiAcDismiss(string body)
+    {
+        string time = Json.GetString(body, "time", "").Trim();
+        string steamId = Json.GetString(body, "steamId", "").Trim();
+        if (time.Length == 0 || !Regex.IsMatch(steamId, "^[0-9]{5,20}$"))
+        {
+            return "{\"error\":\"alerte invalide\"}";
+        }
+        try
+        {
+            List<string> lines = new List<string>();
+            if (File.Exists(AcDismissedPath()))
+            {
+                lines.AddRange(File.ReadAllLines(AcDismissedPath()));
+            }
+            string key = time + "|" + steamId;
+            if (!lines.Contains(key))
+            {
+                lines.Add(key);
+            }
+            while (lines.Count > 500)
+            {
+                lines.RemoveAt(0);
+            }
+            File.WriteAllLines(AcDismissedPath(), lines.ToArray());
+            StaffLog("marque l'alerte anti-cheat " + key + " comme faux positif");
+            return "{\"ok\":true}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
     }
 
     private string ApiAntiCheat()
