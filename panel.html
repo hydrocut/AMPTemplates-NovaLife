@@ -532,6 +532,7 @@ function playerActions(id){
   b += '<button onclick="closeModal();xpPlayer(\'' + id + '\')">✨ Donner de l XP</button>';
   b += '<button onclick="closeModal();prisonPlayer(\'' + id + '\')">⚖ Prison / libérer</button>';
   b += '<button onclick="closeModal();permisPlayer(\'' + id + '\')">🚦 Points de permis</button>';
+  b += '<button onclick="closeModal();garageBySteam(\'' + id + '\',\'' + esc(who) + '\')">🚗 Garage</button>';
   b += '<button onclick="closeModal();localMsgPlayer(\'' + id + '\')">📍 Message local</button>';
   b += '<button class="danger" onclick="closeModal();kickPlayer(\'' + id + '\')">Kick</button>';
   b += '<button class="danger" onclick="closeModal();banPlayer(\'' + id + '\')">Ban</button>';
@@ -543,7 +544,7 @@ function histActions(cid, steamId, banned){
   var b = '';
   b += '<button onclick="closeModal();playerCard(' + cid + ',\'' + esc(username) + '\')">📇 Fiche complète</button>';
   b += '<button onclick="closeModal();offInv(' + cid + ',\'' + esc(username) + '\')">Inventaire</button>';
-  b += '<button onclick="closeModal();offGarage(' + cid + ',\'' + esc(username) + '\')">Garage</button>';
+  b += '<button onclick="closeModal();offGarage(' + cid + ',\'' + esc(username) + '\',\'' + steamId + '\')">Garage</button>';
   if(banned) b += '<button onclick="closeModal();histUnban(\'' + steamId + '\')">Débannir</button>';
   else b += '<button class="danger" onclick="closeModal();histBan(\'' + steamId + '\')">Ban</button>';
   openModal('<h3>' + esc(username) + '</h3>' + b);
@@ -1265,6 +1266,9 @@ function showVehicles(){
   if(!steamId) return toast('Sélectionne un joueur', true);
   var pl = playersCache.filter(function(p){ return p.steamId === steamId; })[0];
   var who = pl ? pl.pseudo : steamId;
+  garageBySteam(steamId, who);
+}
+function garageBySteam(steamId, who){
   api('vehicles?steamId=' + encodeURIComponent(steamId)).then(function(list){
     if(list.error){ toast(list.error, true); return; }
     var body = !list.length ? '<p class="muted">Aucun véhicule.</p>' : vehTable(list, function(v){
@@ -1334,7 +1338,7 @@ function renderHistory(){
         '<span class="desktop-actions">' +
         (a.characterId > 0 ? '<button onclick="playerCard(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Fiche</button>' +
           '<button onclick="offInv(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Inv</button>' +
-          '<button onclick="offGarage(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Garage</button>' : '') +
+          '<button onclick="offGarage(' + a.characterId + ',\'' + esc(a.username||'') + '\',\'' + a.steamId + '\')">Garage</button>' : '') +
         (a.banned
           ? '<button onclick="histUnban(\'' + a.steamId + '\')">Débannir</button>'
           : '<button class="danger" onclick="histBan(\'' + a.steamId + '\')">Ban</button>') +
@@ -1367,19 +1371,29 @@ function offRemovePrompt(characterId, itemId, max, username){
   if(q === null) return;
   offRemove(characterId, itemId, Math.min(parseInt(q) || 1, max), username);
 }
-function offGarage(characterId, username){
+function offGarage(characterId, username, steamId){
   api('offlinevehicles?characterId=' + characterId).then(function(list){
     if(list.error){ toast(list.error, true); return; }
+    var sid = steamId || '';
+    var online = sid && playersCache.some(function(p){ return p.steamId === sid; });
     var body = !list.length ? '<p class="muted">Aucun véhicule.</p>' : vehTable(list, function(v){
-      return (v.isStowed ? '' : '<button onclick="offVehAction(\'vehiclestow\',' + v.vehicleId + ',' + characterId + ',\'' + esc(username) + '\')">Ranger</button> ') +
-        '<button class="danger" onclick="if(confirm(\'Supprimer ce véhicule ?\'))offVehAction(\'vehicledelete\',' + v.vehicleId + ',' + characterId + ',\'' + esc(username) + '\')">Suppr</button>';
+      return (v.isStowed
+          ? (online ? '<button onclick="offVehUnstow(' + v.vehicleId + ',\'' + sid + '\',' + characterId + ',\'' + esc(username) + '\')">Sortir sur le joueur</button> ' : '')
+          : '<button onclick="offVehAction(\'vehiclestow\',' + v.vehicleId + ',' + characterId + ',\'' + esc(username) + '\',\'' + sid + '\')">Ranger</button> ') +
+        '<button class="danger" onclick="if(confirm(\'Supprimer ce véhicule ?\'))offVehAction(\'vehicledelete\',' + v.vehicleId + ',' + characterId + ',\'' + esc(username) + '\',\'' + sid + '\')">Suppr</button>';
     });
-    openModal('<h3>Garage de ' + esc(username) + ' <span class="badge">hors ligne</span></h3>' + body, true);
+    var badge = online ? ' <span class="badge" style="color:var(--ok)">en ligne</span>' : ' <span class="badge">hors ligne</span>';
+    openModal('<h3>Garage de ' + esc(username) + badge + '</h3>' + body, true);
   });
 }
-function offVehAction(path, vehicleId, characterId, username){
+function offVehUnstow(vehicleId, steamId, characterId, username){
+  api('vehicleunstow', {vehicleId: vehicleId, steamId: steamId}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Véhicule sorti près du joueur'); offGarage(characterId, username, steamId); }
+  });
+}
+function offVehAction(path, vehicleId, characterId, username, steamId){
   api(path, {vehicleId: vehicleId}).then(function(r){
-    if(r.error){ toast(r.error, true); } else { toast('OK'); offGarage(characterId, username); }
+    if(r.error){ toast(r.error, true); } else { toast('OK'); offGarage(characterId, username, steamId); }
   });
 }
 
