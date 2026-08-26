@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.6 — TeamKit.fr
+/// TKAntiCheat v1.7 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -51,6 +51,7 @@ public class TKAntiCheat : Plugin
     private readonly Dictionary<ulong, Track> tracks = new Dictionary<ulong, Track>();
     private HashSet<string> adminWhitelist = new HashSet<string>();
     private readonly Dictionary<ulong, double> adminLastAlert = new Dictionary<ulong, double>();
+    private readonly Dictionary<ulong, double> adminFirstSeen = new Dictionary<ulong, double>();
     // Historique récent (pour le panel + throttle des logs identiques)
     private readonly List<string> alerts = new List<string>();
 
@@ -64,7 +65,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.6 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.7 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -82,7 +83,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.6 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.7 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -370,7 +371,22 @@ public class TKAntiCheat : Plugin
             string steamId = p.steamId.ToString();
             if (adminWhitelist.Contains(steamId))
             {
+                adminFirstSeen.Remove(p.steamId);
                 continue; // admin légitime déclaré
+            }
+
+            // Grâce : une promotion via le panel ajoute le joueur à la liste
+            // blanche, relue sous ~20 s — on attend avant de sanctionner,
+            // sinon on kick l'admin fraîchement promu (course de vitesse).
+            double firstSeen;
+            if (!adminFirstSeen.TryGetValue(p.steamId, out firstSeen))
+            {
+                adminFirstSeen[p.steamId] = now;
+                continue;
+            }
+            if (now - firstSeen < config.adminGraceSeconds)
+            {
+                continue;
             }
 
             // admin non autorisé : alerte throttlée
@@ -849,6 +865,9 @@ public class TKAntiCheatConfig
     public bool adminAutoReset = false;
     // Kick automatique du joueur détecté avec un niveau admin non autorisé
     public bool adminKick = false;
+    // Délai de grâce (s) avant de sanctionner un admin hors liste blanche :
+    // une promotion légitime via le panel met jusqu'à ~20 s à être relue.
+    public int adminGraceSeconds = 35;
     // Anti-usurpation : deux connexions simultanées avec le même SteamID = spoof
     public bool spoofCheck = true;
     public bool spoofKick = true;
@@ -886,6 +905,7 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"adminWhitelist\": \"" + (c.adminWhitelist ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",");
         sb.AppendLine("  \"adminAutoReset\": " + (c.adminAutoReset ? "true" : "false") + ",");
         sb.AppendLine("  \"adminKick\": " + (c.adminKick ? "true" : "false") + ",");
+        sb.AppendLine("  \"adminGraceSeconds\": " + c.adminGraceSeconds + ",");
         sb.AppendLine("  \"spoofCheck\": " + (c.spoofCheck ? "true" : "false") + ",");
         sb.AppendLine("  \"spoofKick\": " + (c.spoofKick ? "true" : "false") + ",");
         sb.AppendLine("  \"adminIpGuard\": " + (c.adminIpGuard ? "true" : "false") + ",");
@@ -929,6 +949,7 @@ public class TKAntiCheatConfig
         if (aw.Success) c.adminWhitelist = aw.Groups["v"].Value.Replace("\\\"", "\"").Replace("\\\\", "\\");
         c.adminAutoReset = GetBool(json, "adminAutoReset", c.adminAutoReset);
         c.adminKick = GetBool(json, "adminKick", c.adminKick);
+        c.adminGraceSeconds = GetInt(json, "adminGraceSeconds", c.adminGraceSeconds);
         c.spoofCheck = GetBool(json, "spoofCheck", c.spoofCheck);
         c.spoofKick = GetBool(json, "spoofKick", c.spoofKick);
         c.adminIpGuard = GetBool(json, "adminIpGuard", c.adminIpGuard);
