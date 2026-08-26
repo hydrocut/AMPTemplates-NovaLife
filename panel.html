@@ -21,7 +21,7 @@ body{background:var(--bg);color:var(--text);font:13.5px/1.5 'IBM Plex Sans',syst
 .sbrand{display:flex;gap:10px;align-items:center;padding:16px 16px 14px;border-bottom:1px solid var(--border)}
 #home-link{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--border);border-radius:8px;color:var(--muted);text-decoration:none;font-size:15px;flex:none}
 #home-link:hover{border-color:var(--accent);color:var(--accent)}
-#srvname{font-size:15px;font-weight:700;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:145px}
+#srvname{font-size:14px;font-weight:700;letter-spacing:.2px;line-height:1.25;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .brand-sub{font-size:9px;color:var(--muted);font-weight:600;letter-spacing:.16em;margin-top:2px}
 #tabs{display:flex;flex-direction:column;padding:10px 0;gap:1px;flex:1}
 #tabs button{display:flex;align-items:center;gap:10px;border:none;background:none;padding:9px 16px;font-size:13px;color:var(--muted);text-align:left;border-left:2px solid transparent;font-family:inherit;white-space:nowrap}
@@ -29,6 +29,8 @@ body{background:var(--bg);color:var(--text);font:13.5px/1.5 'IBM Plex Sans',syst
 #tabs button:hover{color:var(--text)}
 #tabs button.active{color:var(--text);border-left-color:var(--accent);background:linear-gradient(90deg,var(--accent-soft),transparent);font-weight:600}
 #tabs button.active i{background:var(--accent)}
+.navbadge{margin-left:auto;background:var(--bad);color:#fff;font-size:9px;font-weight:700;border-radius:999px;padding:1px 6px;min-width:17px;text-align:center;line-height:1.5}
+@media (max-width:820px){.navbadge{margin-left:5px}}
 .side-foot{padding:12px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;align-items:flex-start;gap:9px;font-size:12px}
 #themes{display:flex;gap:7px}
 .thdot{width:15px;height:15px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:block;opacity:.75}
@@ -1128,7 +1130,7 @@ function showTab(name){
   localStorage.setItem('tkweb_tab', name);
   if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3) loadPanelUsers(); }
   if(name === 'monde'){ loadPlugins(); if(myLevel() >= 3){ loadBackups(); loadBench(); } }
-  if(name === 'securite' && myLevel() >= 3) loadAcConfig();
+  if(name === 'securite'){ if(myLevel() >= 3) loadAcConfig(); markAlertsSeen(); }
   if(name === 'chat') chatScrollBottom();
 }
 
@@ -1908,6 +1910,51 @@ document.querySelectorAll('.thdot').forEach(function(d){
   d.onclick = function(){ setTheme(d.getAttribute('data-th')); };
 });
 try { setTheme(localStorage.getItem('tkweb_theme') || ''); } catch(e) { setTheme(''); }
+
+// --- Pastilles de notification sur la navigation ---
+// Sécurité : nouvelles alertes anti-cheat non consultées (persisté par navigateur)
+// Admins (proprio) : admins pas encore validés en liste blanche
+var lastAlertsMax = '';
+function setNavBadge(tab, n){
+  var btn = document.querySelector('#tabs button[data-nav="' + tab + '"]');
+  if(!btn) return;
+  var b = btn.querySelector('.navbadge');
+  if(n > 0){
+    if(!b){ b = document.createElement('span'); b.className = 'navbadge'; btn.appendChild(b); }
+    b.textContent = n > 99 ? '99+' : n;
+  } else if(b){ b.remove(); }
+}
+function markAlertsSeen(){
+  if(lastAlertsMax){
+    try { localStorage.setItem('tkweb_alerts_seen', lastAlertsMax); } catch(e) {}
+  }
+  setNavBadge('securite', 0);
+}
+function pollBadges(){
+  if(!auth) return;
+  api('accheck').then(function(list){
+    if(!Array.isArray(list)) return;
+    var seen = '';
+    try { seen = localStorage.getItem('tkweb_alerts_seen') || ''; } catch(e) {}
+    var unseen = 0;
+    list.forEach(function(a){
+      if(a.time > lastAlertsMax) lastAlertsMax = a.time;
+      if(a.time > seen) unseen++;
+    });
+    // si l'onglet Sécurité est ouvert, tout est considéré comme lu
+    var current = localStorage.getItem('tkweb_tab');
+    if(current === 'securite'){ markAlertsSeen(); return; }
+    setNavBadge('securite', unseen);
+  }).catch(function(){});
+  if(myLevel() >= 3){
+    api('admins').then(function(list){
+      if(!Array.isArray(list)) return;
+      setNavBadge('admins', list.filter(function(a){ return !a.whitelisted; }).length);
+    }).catch(function(){});
+  }
+}
+setInterval(pollBadges, 30000);
+setTimeout(pollBadges, 2500);
 applyRole();
 if(auth){ hideLogin(); refresh(); loadCatalogs(); chatPoll(); actPoll(); } else { showLogin(); }
 setInterval(function(){ if(auth && document.getElementById('login').style.display === 'none'){ refresh(); chatPoll(); actPoll(); } }, 5000);
