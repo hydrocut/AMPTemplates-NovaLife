@@ -118,7 +118,7 @@ input:focus{outline:none;border-color:var(--accent)}
 .pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
 .plugitem{display:flex;justify-content:space-between;gap:8px;background:#0f1420;border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
 .plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.cfgrow{display:flex;align-items:center;gap:8px;margin:6px 0}.cfgrow label{flex:1;font-size:12px;color:var(--muted)}.cfgrow input{width:110px;background:#0f1420;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.cfgbox{background:#0f1420;border:1px solid var(--border);border-radius:8px;padding:2px 12px;margin-top:8px;min-width:270px}.cfgrow{display:flex;align-items:center;gap:12px;padding:9px 0}.cfgrow + .cfgrow{border-top:1px solid #1c2436}.cfgrow label{flex:1;font-size:12px;color:var(--text);line-height:1.35}.cfgrow input{width:84px;text-align:right;background:#151b2b;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;flex:none}.cfgrow button{padding:5px 12px;font-size:12px;flex:none}.cfgrow .switch{padding:0;flex:none}.cfgrow.col{flex-direction:column;align-items:stretch;gap:6px}.cfgrow.col .cfgline{display:flex;gap:8px}.cfgrow.col input{flex:1;width:auto;text-align:left}
 .gl{width:64px;text-align:right;font-size:12px}
 button.chip{display:inline-flex;align-items:center;gap:6px;min-width:200px;justify-content:flex-start;padding:6px 12px}
 button.chip img{width:26px;height:26px;object-fit:contain}
@@ -1513,16 +1513,20 @@ function loadPlugCfg(pname){
     var el = document.getElementById('plugcfg');
     if(!el) return;
     if(r.error){ el.innerHTML = ''; return; }
-    var h = '<h4 style="margin:8px 0 4px;color:var(--accent);font-size:13px">Réglages <span class="muted" style="font-weight:400">— appliqués sous ~30 s, sans restart</span></h4>';
+    var h = '<h4 style="margin:8px 0 0;color:var(--accent);font-size:13px">Réglages <span class="muted" style="font-weight:400">— appliqués sous ~30 s, sans restart</span></h4>';
+    h += '<div class="cfgbox">';
     (PLUG_CFG[pname]||[]).forEach(function(d){
       var k=d[0], t=d[1], lab=d[2]; var v=r.values[k];
       if(v===undefined) return;
       if(t==='b'){
-        h += '<div class="switch' + (v?' on':'') + '" data-pk="' + k + '" data-pv="' + (v?0:1) + '"><span class="sw"></span><span>' + lab + '</span></div><br>';
+        h += '<div class="cfgrow"><label>' + lab + '</label><div class="switch' + (v?' on':'') + '" data-pk="' + k + '" data-pv="' + (v?0:1) + '"><span class="sw"></span></div></div>';
+      } else if(t==='s'){
+        h += '<div class="cfgrow col"><label>' + lab + '</label><div class="cfgline"><input data-pi="' + k + '" type="text" value="' + esc(String(v)) + '"><button data-ps="' + k + '">OK</button></div></div>';
       } else {
-        h += '<div class="cfgrow"><label>' + lab + '</label><input data-pi="' + k + '" type="' + (t==='n'?'number':'text') + '" value="' + esc(String(v)) + '"><button data-ps="' + k + '">OK</button></div>';
+        h += '<div class="cfgrow"><label>' + lab + '</label><input data-pi="' + k + '" type="number" value="' + esc(String(v)) + '"><button data-ps="' + k + '">OK</button></div>';
       }
     });
+    h += '</div>';
     el.innerHTML = h; el.classList.remove('muted');
     el.querySelectorAll('[data-pk]').forEach(function(sw){
       sw.onclick = function(){ plugSet(pname, sw.getAttribute('data-pk'), sw.getAttribute('data-pv')); };
