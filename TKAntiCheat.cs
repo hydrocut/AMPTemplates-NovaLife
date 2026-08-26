@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.7 — TeamKit.fr
+/// TKAntiCheat v1.7.1 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -65,7 +65,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.7 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.7.1 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -83,7 +83,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.7 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.7.1 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -265,6 +265,31 @@ public class TKAntiCheat : Plugin
         {
             return;
         }
+        // Filet de sécurité : si la liste est vide alors qu'on en avait une
+        // (config écrasée, champ vidé par erreur...), on restaure la dernière
+        // liste connue plutôt que de re-partir de la base — sinon un admin
+        // momentanément rétrogradé disparaît de la liste et se fait kicker.
+        if (string.IsNullOrEmpty(config.adminWhitelist))
+        {
+            try
+            {
+                string bak = Path.Combine(pluginDir, "adminwhitelist.bak");
+                if (File.Exists(bak))
+                {
+                    string saved = File.ReadAllText(bak).Trim();
+                    if (saved.Length > 0)
+                    {
+                        config.adminWhitelist = saved;
+                        SaveConfig();
+                        Debug.Log("[TKAC] Liste blanche vide — restaurée depuis adminwhitelist.bak ("
+                            + saved.Split(',').Length + " comptes)");
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
         // Première init : apprend les admins DÉJÀ présents en base (staff légitime)
         // pour ne pas les alerter, et persiste la liste dans la config.
         if (string.IsNullOrEmpty(config.adminWhitelist))
@@ -306,6 +331,17 @@ public class TKAntiCheat : Plugin
             if (id.Length > 0)
             {
                 adminWhitelist.Add(id);
+            }
+        }
+        if (adminWhitelist.Count > 0)
+        {
+            try
+            {
+                File.WriteAllText(Path.Combine(pluginDir, "adminwhitelist.bak"),
+                    string.Join(",", new List<string>(adminWhitelist).ToArray()));
+            }
+            catch
+            {
             }
         }
     }

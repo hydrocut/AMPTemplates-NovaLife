@@ -329,7 +329,7 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.15.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.15.3 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -3716,6 +3716,10 @@ public class TKWebPanel : Plugin
             {
                 // texte : uniquement pour des listes d'IP — caractères sûrs seulement
                 string clean = Regex.Replace(value, "[^0-9a-fA-F.:, ]", "");
+                if (plugin == "TKAntiCheat" && key == "adminWhitelist" && clean.Trim(new char[] { ' ', ',' }).Length == 0)
+                {
+                    return "{\"error\":\"liste blanche vide refusée (protection anti-effacement)\"}";
+                }
                 updated = Regex.Replace(json, "\"" + key + "\"\\s*:\\s*\"(?:\\\\.|[^\"])*\"",
                     "\"" + key + "\": \"" + clean + "\"");
             }
