@@ -327,7 +327,7 @@ public class TKWebPanel : Plugin
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
             StartAutoBackup();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.8.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.8.3 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -527,6 +527,9 @@ public class TKWebPanel : Plugin
             byte[] buffer = Encoding.UTF8.GetBytes(responseText);
             ctx.Response.StatusCode = status;
             ctx.Response.ContentType = contentType;
+            // le HTML et l'API ne doivent jamais être mis en cache par le
+            // navigateur (sinon un ancien panel reste affiché après une maj)
+            try { ctx.Response.Headers["Cache-Control"] = "no-store, must-revalidate"; } catch { }
             ctx.Response.ContentLength64 = buffer.Length;
             ctx.Response.OutputStream.Write(buffer, 0, buffer.Length);
             ctx.Response.OutputStream.Close();
