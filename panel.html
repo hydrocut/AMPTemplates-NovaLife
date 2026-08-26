@@ -114,6 +114,53 @@ input:focus{outline:none;border-color:var(--accent)}
 button.chip{display:inline-flex;align-items:center;gap:6px;min-width:200px;justify-content:flex-start;padding:6px 12px}
 button.chip img{width:26px;height:26px;object-fit:contain}
 #pick-search{width:100%;margin-bottom:10px}
+
+/* ===== Responsive tablette / mobile ===== */
+@media (max-width: 820px){
+  main{padding:12px}
+  header{gap:10px;padding:10px 12px;flex-wrap:wrap}
+  .srvbox{order:3;flex-basis:100%;text-align:left}
+  #srvname{font-size:17px;white-space:normal}
+  .srv-sub{display:none}
+  header .right{margin-left:auto}
+  #tabs{padding:6px 8px;gap:2px;-webkit-overflow-scrolling:touch}
+  #tabs button{padding:8px 11px;font-size:12px}
+  section{padding:12px;margin-bottom:14px;border-radius:9px}
+  section h2{font-size:14px}
+  .cards{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+  .card{padding:11px}
+  .card .v{font-size:18px}
+  .row{gap:6px}
+  .row input,.row select{flex:1 1 100%;min-width:0}
+  .row button{flex:1 1 auto}
+  .gl{width:auto;text-align:left;flex-basis:100%}
+  button.chip{min-width:0;width:100%}
+  th,td{padding:6px 7px;font-size:12px}
+  td{max-width:150px}
+  .modal .box, .modal .box.wide{max-width:100%;width:100%;max-height:88vh;border-radius:14px 14px 0 0;margin-top:auto;padding:16px}
+  .modal{align-items:flex-end}
+  #toast{left:10px;right:10px;bottom:10px}
+  .toast{font-size:12px}
+  #chat-box{height:60vh}
+  #act-box{height:52vh}
+  .invgrid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  .pickgrid{grid-template-columns:repeat(auto-fill,minmax(88px,1fr));max-height:60vh}
+  .vico{width:52px;height:30px}
+}
+@media (max-width: 480px){
+  .brand-sub{display:none}
+  #home-link{width:30px;height:30px;font-size:15px}
+  .cards{grid-template-columns:1fr 1fr}
+  .actions{gap:3px}
+  .actions button{padding:5px 7px;font-size:11px}
+  #tabs button{padding:7px 9px}
+  td{max-width:120px}
+}
+/* zone tactile confortable + pas de zoom iOS sur focus input */
+@media (hover: none){
+  button,#tabs button{min-height:34px}
+  input,select{font-size:16px}
+}
 </style>
 </head>
 <body>

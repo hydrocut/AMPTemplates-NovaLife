@@ -326,7 +326,8 @@ public class TKWebPanel : Plugin
             InitActivity();
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.6.2 initialisé — panel sur le port " + port);
+            StartAutoBackup();
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.7.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -2503,23 +2504,78 @@ public class TKWebPanel : Plugin
         });
     }
 
-    // Dossier de sauvegardes de cette instance (déduit du serverPort)
-    private string BackupDir()
+    // Dossier de sauvegardes DANS l'instance (visible conteneur + hôte)
+    private static string BackupDir()
     {
-        int port = 7787;
+        return Path.GetFullPath(Path.Combine(pluginDir, "..", "..", "backups"));
+    }
+
+    private const int BackupKeep = 28; // ~7 jours à 1 backup/6 h + manuels
+
+    // Sauvegarde à chaud via SQLite VACUUM INTO (cohérent en écriture),
+    // repli sur checkpoint WAL + copie de fichier si VACUUM INTO indispo.
+    private static string DoBackup(out string fileName)
+    {
+        fileName = null;
+        string dir = BackupDir();
+        Directory.CreateDirectory(dir);
+        string db = Path.GetFullPath(Path.Combine(pluginDir, "..", "..", "life.db"));
+        if (!File.Exists(db))
+        {
+            return "life.db introuvable";
+        }
+        string name = "life-" + DateTime.Now.ToString("yyyy-MM-dd_HHmm") + ".db";
+        string target = Path.Combine(dir, name);
+        if (File.Exists(target))
+        {
+            name = "life-" + DateTime.Now.ToString("yyyy-MM-dd_HHmmss") + ".db";
+            target = Path.Combine(dir, name);
+        }
         try
         {
-            string cfg = Path.Combine(Path.GetDirectoryName(pluginDir), "../Config/server.json");
-            if (File.Exists(cfg))
+            SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(db, SQLite.SQLiteOpenFlags.ReadWrite, false);
+            try
             {
-                port = Json.GetInt(File.ReadAllText(cfg), "serverPort", port);
+                string safe = target.Replace("'", "''");
+                conn.Execute("VACUUM INTO '" + safe + "'");
+            }
+            finally
+            {
+                conn.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            // repli : checkpoint puis copie brute
+            try
+            {
+                SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(db, SQLite.SQLiteOpenFlags.ReadWrite, false);
+                try { conn.Execute("PRAGMA wal_checkpoint(TRUNCATE)"); } catch { }
+                conn.Close();
+                File.Copy(db, target, true);
+                Debug.LogWarning("[TKWEB] Backup via copie (VACUUM INTO indispo : " + ex.Message + ")");
+            }
+            catch (Exception ex2)
+            {
+                return "échec sauvegarde : " + ex2.Message;
+            }
+        }
+        // rotation
+        try
+        {
+            List<string> files = new List<string>(Directory.GetFiles(dir, "life-*.db"));
+            files.Sort();
+            while (files.Count > BackupKeep)
+            {
+                File.Delete(files[0]);
+                files.RemoveAt(0);
             }
         }
         catch
         {
         }
-        string name = port == 7787 ? "vizu" : (port == 7789 ? "marseille" : (port == 7788 ? "dev" : ("port" + port)));
-        return "/home/amp/backups/novalife/" + name;
+        fileName = name;
+        return null;
     }
 
     private string ApiBackups()
@@ -2531,7 +2587,7 @@ public class TKWebPanel : Plugin
         {
             if (Directory.Exists(dir))
             {
-                List<string> files = new List<string>(Directory.GetFiles(dir, "life-*.db.gz"));
+                List<string> files = new List<string>(Directory.GetFiles(dir, "life-*.db"));
                 files.Sort();
                 files.Reverse();
                 bool first = true;
@@ -2557,33 +2613,46 @@ public class TKWebPanel : Plugin
 
     private string ApiBackupNow()
     {
-        try
+        string fileName;
+        string err = DoBackup(out fileName);
+        if (err != null)
         {
-            System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "sudo",
-                Arguments = "-n /home/amp/backups/tk_backup_trigger.sh",
-                UseShellExecute = false,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true
-            };
-            System.Diagnostics.Process proc = System.Diagnostics.Process.Start(psi);
-            if (!proc.WaitForExit(20000))
-            {
-                return "{\"error\":\"timeout de la sauvegarde\"}";
-            }
-            if (proc.ExitCode != 0)
-            {
-                return "{\"error\":\"échec (code " + proc.ExitCode + ")\"}";
-            }
-            StaffLog("sauvegarde manuelle de la base déclenchée");
-            Debug.Log("[TKWEB] BACKUP manuel déclenché");
-            return "{\"ok\":true}";
+            return "{\"error\":" + Json.Str(err) + "}";
         }
-        catch (Exception ex)
+        StaffLog("sauvegarde manuelle de la base : " + fileName);
+        Debug.Log("[TKWEB] BACKUP manuel -> " + fileName);
+        return "{\"ok\":true,\"name\":" + Json.Str(fileName) + "}";
+    }
+
+    // Sauvegarde automatique périodique (thread de fond)
+    private void StartAutoBackup()
+    {
+        Thread t = new Thread(delegate ()
         {
-            return "{\"error\":" + Json.Str("sauvegarde indisponible : " + ex.Message) + "}";
-        }
+            while (true)
+            {
+                try
+                {
+                    Thread.Sleep(config.backupIntervalHours * 3600 * 1000);
+                    string fn;
+                    string err = DoBackup(out fn);
+                    if (err == null)
+                    {
+                        Debug.Log("[TKWEB] Sauvegarde auto -> " + fn);
+                    }
+                    else
+                    {
+                        Debug.LogError("[TKWEB] Sauvegarde auto échouée : " + err);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[TKWEB] Erreur boucle sauvegarde : " + ex.Message);
+                }
+            }
+        });
+        t.IsBackground = true;
+        t.Start();
     }
 
     private class HeavyAreaRow
@@ -3544,6 +3613,8 @@ public class TKWebPanelConfig
     public string publicUrl = "";
     // Conservation des historiques chat + journal d'activité (jours, min 92 = 3 mois)
     public int logRetentionDays = 92;
+    // Intervalle de la sauvegarde automatique de la base (heures)
+    public int backupIntervalHours = 6;
 
     public static string ToJson(TKWebPanelConfig c)
     {
@@ -3556,7 +3627,8 @@ public class TKWebPanelConfig
         sb.AppendLine("  \"publicHost\": " + Json.Str(c.publicHost) + ",");
         sb.AppendLine("  \"ansiColors\": " + (c.ansiColors ? "true" : "false") + ",");
         sb.AppendLine("  \"publicUrl\": " + Json.Str(c.publicUrl) + ",");
-        sb.AppendLine("  \"logRetentionDays\": " + c.logRetentionDays);
+        sb.AppendLine("  \"logRetentionDays\": " + c.logRetentionDays + ",");
+        sb.AppendLine("  \"backupIntervalHours\": " + c.backupIntervalHours);
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -3577,6 +3649,8 @@ public class TKWebPanelConfig
         c.publicUrl = Json.GetString(json, "publicUrl", c.publicUrl);
         c.logRetentionDays = Json.GetInt(json, "logRetentionDays", c.logRetentionDays);
         if (c.logRetentionDays < 92) c.logRetentionDays = 92;
+        c.backupIntervalHours = Json.GetInt(json, "backupIntervalHours", c.backupIntervalHours);
+        if (c.backupIntervalHours < 1) c.backupIntervalHours = 1;
         if (c.port != 0 && (c.port < 1024 || c.port > 65535))
         {
             c.port = 0;

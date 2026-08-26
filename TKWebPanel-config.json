@@ -2,5 +2,7 @@
   "enabled": true,
   "port": 0,
   "password": "",
-  "allocatedCores": 3
+  "allocatedCores": 3,
+  "backupIntervalHours": 6,
+  "logRetentionDays": 92
 }
