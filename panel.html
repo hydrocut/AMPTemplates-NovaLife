@@ -983,7 +983,10 @@ function applySort(tbody){
   });
   sortingNow = true;
   rows.forEach(function(r){ tbody.appendChild(r); });
-  sortingNow = false;
+  // Les mutations du tri sont livrees en microtache APRES ce bloc : on ne
+  // relache le verrou qu'a la macrotache suivante, sinon l'observateur
+  // re-trie en boucle infinie et la page fige.
+  setTimeout(function(){ sortingNow = false; }, 0);
   // fleche sur l'en-tete actif
   var table = tbody.closest('table');
   if(table && table.tHead){

@@ -329,7 +329,7 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.15.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.15.2 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
