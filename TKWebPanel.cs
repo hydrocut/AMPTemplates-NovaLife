@@ -328,7 +328,7 @@ public class TKWebPanel : Plugin
             LoadPanelUsers();
             StartAutoBackup();
         StartSericache();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.12 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.12.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -3539,7 +3539,7 @@ public class TKWebPanel : Plugin
         { "TKGhost", new string[] { "enabled:b", "ghostAfterMinutes:n", "playerRadiusMeters:n", "checkIntervalSeconds:n" } },
         { "TKDynamicFps", new string[] { "enabled:b", "idleFps:n", "minPlayersFps:n", "maxFps:n", "cpuLowPercent:n", "cpuHighPercent:n" } },
         { "TKAntiFlood", new string[] { "enabled:b", "maxAttempts:n", "windowSeconds:n", "banMinutes:n", "whitelist:s" } },
-        { "TKAntiCheat", new string[] { "moneyAlertThreshold:n", "maxSpeed:n", "spamThreshold:n", "spamWindowSeconds:n" } }
+        { "TKAntiCheat", new string[] { "moneyAlertThreshold:n", "maxSpeed:n", "spamThreshold:n", "spamWindowSeconds:n", "adminWhitelist:s" } }
     };
 
     private string PlugConfigFile(string name)
