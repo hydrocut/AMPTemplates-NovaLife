@@ -9,7 +9,7 @@ using Mirror;
 using UnityEngine;
 
 /// <summary>
-/// TKAntiFlood v1.0 — TeamKit.fr
+/// TKAntiFlood v1.1 — TeamKit.fr
 ///
 /// Protège le serveur contre les floods de connexions TCP (attaques type
 /// "possible header attack with a header of: 0 bytes" en rafale depuis une
@@ -62,7 +62,7 @@ public class TKAntiFlood : Plugin
         LoadConfig();
         LoadBans();
         HookTransport();
-        Debug.Log("[TKFLOOD] Plugin TKAntiFlood v1.0 initialisé (seuil "
+        Debug.Log("[TKFLOOD] Plugin TKAntiFlood v1.1 initialisé (seuil "
             + config.maxAttempts + " connexions / " + config.windowSeconds + "s, ban "
             + (config.banMinutes <= 0 ? "permanent" : config.banMinutes + " min") + ")");
     }
@@ -114,6 +114,11 @@ public class TKAntiFlood : Plugin
     // Renvoie true si la connexion doit être transmise au jeu.
     private bool FilterConnection(Transport transport, int connectionId)
     {
+        MaybeReloadConfig();
+        if (!config.enabled)
+        {
+            return true;
+        }
         if (config == null || !config.enabled)
         {
             return true;
@@ -354,6 +359,56 @@ public class TKAntiFlood : Plugin
     // ------------------------------------------------------------------
     // Config
     // ------------------------------------------------------------------
+    private string configPathSaved;
+    private string lastConfigJson;
+    private int lastReloadTick;
+
+    // Vérifie (au plus toutes les 20 s) si config.json a changé (panel web) — à chaud.
+    private void MaybeReloadConfig()
+    {
+        int tick = Environment.TickCount;
+        if (lastReloadTick != 0 && unchecked(tick - lastReloadTick) < 20000)
+        {
+            return;
+        }
+        lastReloadTick = tick == 0 ? 1 : tick;
+        try
+        {
+            if (configPathSaved == null || !File.Exists(configPathSaved))
+            {
+                return;
+            }
+            string txt = File.ReadAllText(configPathSaved);
+            if (txt == lastConfigJson)
+            {
+                return;
+            }
+            lastConfigJson = txt;
+            config = TKAntiFloodConfig.FromJson(txt);
+            whitelist = new HashSet<string>();
+            whitelist.Add("127.0.0.1");
+            whitelist.Add("::1");
+            if (!string.IsNullOrEmpty(config.whitelist))
+            {
+                foreach (string entry in config.whitelist.Split(','))
+                {
+                    string ip = entry.Trim();
+                    if (ip.Length > 0)
+                    {
+                        whitelist.Add(ip);
+                    }
+                }
+            }
+            Debug.Log("[TKFLOOD] Config rechargée (panel) : actif=" + config.enabled
+                + ", seuil " + config.maxAttempts + "/" + config.windowSeconds + "s, ban "
+                + (config.banMinutes <= 0 ? "permanent" : config.banMinutes + " min"));
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKFLOOD] Erreur rechargement config : " + ex.Message);
+        }
+    }
+
     private void LoadConfig()
     {
         try
@@ -369,12 +424,16 @@ public class TKAntiFlood : Plugin
             {
                 config = new TKAntiFloodConfig();
                 File.WriteAllText(configPath, TKAntiFloodConfig.ToJson(config));
+                configPathSaved = configPath;
+                lastConfigJson = TKAntiFloodConfig.ToJson(config);
                 Debug.Log("[TKFLOOD] config.json créé : " + configPath);
             }
             else
             {
                 config = TKAntiFloodConfig.FromJson(File.ReadAllText(configPath));
                 File.WriteAllText(configPath, TKAntiFloodConfig.ToJson(config));
+                configPathSaved = configPath;
+                lastConfigJson = TKAntiFloodConfig.ToJson(config);
                 Debug.Log("[TKFLOOD] config.json chargé");
             }
         }

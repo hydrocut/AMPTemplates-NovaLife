@@ -327,7 +327,7 @@ public class TKWebPanel : Plugin
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
             StartAutoBackup();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.9.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.10 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -689,6 +689,8 @@ public class TKWebPanel : Plugin
             case "/api/backupnow":
             case "/api/acconfig":
             case "/api/acset":
+            case "/api/plugconfig":
+            case "/api/plugset":
                 return 3;
             // modo autorisé (consultation + modération légère)
             case "/api/status":
@@ -806,6 +808,10 @@ public class TKWebPanel : Plugin
                 return ApiAcConfig();
             case "/api/acset":
                 return ApiAcSet(body);
+            case "/api/plugconfig":
+                return ApiPlugConfig(ctx.Request.QueryString["name"]);
+            case "/api/plugset":
+                return ApiPlugSet(body);
             case "/api/history":
                 return ApiHistory();
             case "/api/offlineinv":
@@ -3497,6 +3503,148 @@ public class TKWebPanel : Plugin
             File.WriteAllText(f, updated);
             StaffLog("réglage anti-cheat " + key + " = " + (value ? "activé" : "désactivé"));
             Debug.Log("[TKWEB] ACSET " + key + "=" + value + " (pris en compte sous ~20 s)");
+            return "{\"ok\":true}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    // --- Réglages génériques des plugins TeamKit (owner uniquement) ---
+    // Clés éditables par plugin, au format "clé:type" (b = booléen, n = nombre, s = texte).
+    private static readonly Dictionary<string, string[]> plugEditable = new Dictionary<string, string[]>
+    {
+        { "TKGhost", new string[] { "enabled:b", "ghostAfterMinutes:n", "playerRadiusMeters:n", "checkIntervalSeconds:n" } },
+        { "TKDynamicFps", new string[] { "enabled:b", "idleFps:n", "minPlayersFps:n", "maxFps:n", "cpuLowPercent:n", "cpuHighPercent:n" } },
+        { "TKAntiFlood", new string[] { "enabled:b", "maxAttempts:n", "windowSeconds:n", "banMinutes:n", "whitelist:s" } },
+        { "TKAntiCheat", new string[] { "moneyAlertThreshold:n", "maxSpeed:n", "spamThreshold:n", "spamWindowSeconds:n" } }
+    };
+
+    private string PlugConfigFile(string name)
+    {
+        return Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), name), "config.json");
+    }
+
+    private string ApiPlugConfig(string name)
+    {
+        if (name == null || !plugEditable.ContainsKey(name))
+        {
+            return "{\"error\":\"plugin inconnu\"}";
+        }
+        try
+        {
+            string f = PlugConfigFile(name);
+            if (!File.Exists(f))
+            {
+                return "{\"error\":\"config introuvable (plugin jamais démarré ?)\"}";
+            }
+            string json = File.ReadAllText(f);
+            StringBuilder sb = new StringBuilder("{\"plugin\":" + Json.Str(name) + ",\"values\":{");
+            bool first = true;
+            foreach (string def in plugEditable[name])
+            {
+                string[] kv = def.Split(':');
+                string key = kv[0];
+                string type = kv[1];
+                if (!Regex.IsMatch(json, "\"" + key + "\"\\s*:"))
+                {
+                    continue;
+                }
+                if (!first)
+                {
+                    sb.Append(",");
+                }
+                first = false;
+                sb.Append(Json.Str(key)).Append(":");
+                if (type == "b")
+                {
+                    sb.Append(Json.GetBool(json, key, false) ? "true" : "false");
+                }
+                else if (type == "n")
+                {
+                    sb.Append(Json.GetDouble(json, key, 0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    sb.Append(Json.Str(Json.GetString(json, key, "")));
+                }
+            }
+            sb.Append("}}");
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    private string ApiPlugSet(string body)
+    {
+        string plugin = Json.GetString(body, "plugin", "");
+        string key = Json.GetString(body, "key", "");
+        string value = Json.GetString(body, "value", "");
+        if (!plugEditable.ContainsKey(plugin))
+        {
+            return "{\"error\":\"plugin inconnu\"}";
+        }
+        string type = null;
+        foreach (string def in plugEditable[plugin])
+        {
+            string[] kv = def.Split(':');
+            if (kv[0] == key)
+            {
+                type = kv[1];
+                break;
+            }
+        }
+        if (type == null)
+        {
+            return "{\"error\":\"réglage inconnu\"}";
+        }
+        try
+        {
+            string f = PlugConfigFile(plugin);
+            if (!File.Exists(f))
+            {
+                return "{\"error\":\"config introuvable\"}";
+            }
+            string json = File.ReadAllText(f);
+            string updated;
+            if (type == "b")
+            {
+                bool b = value == "1" || value.ToLowerInvariant() == "true";
+                updated = Regex.Replace(json, "\"" + key + "\"\\s*:\\s*(true|false)",
+                    "\"" + key + "\": " + (b ? "true" : "false"));
+            }
+            else if (type == "n")
+            {
+                double d;
+                if (!double.TryParse(value.Replace(",", "."), System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out d) || d < 0 || d > 100000000)
+                {
+                    return "{\"error\":\"valeur numérique invalide\"}";
+                }
+                string num = d == Math.Floor(d)
+                    ? ((long)d).ToString()
+                    : d.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                updated = Regex.Replace(json, "\"" + key + "\"\\s*:\\s*-?[0-9][0-9.]*",
+                    "\"" + key + "\": " + num);
+            }
+            else
+            {
+                // texte : uniquement pour des listes d'IP — caractères sûrs seulement
+                string clean = Regex.Replace(value, "[^0-9a-fA-F.:, ]", "");
+                updated = Regex.Replace(json, "\"" + key + "\"\\s*:\\s*\"(?:\\\\.|[^\"])*\"",
+                    "\"" + key + "\": \"" + clean + "\"");
+            }
+            if (updated == json && !Regex.IsMatch(json, "\"" + key + "\"\\s*:"))
+            {
+                return "{\"error\":\"clé absente du fichier\"}";
+            }
+            File.WriteAllText(f, updated);
+            StaffLog("réglage " + plugin + " : " + key + " = " + value);
+            Debug.Log("[TKWEB] PLUGSET " + plugin + "." + key + "=" + value + " (pris en compte sous ~30 s)");
             return "{\"ok\":true}";
         }
         catch (Exception ex)

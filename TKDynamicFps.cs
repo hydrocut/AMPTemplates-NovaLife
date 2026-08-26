@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKDynamicFps v1.1 — TeamKit.fr
+/// TKDynamicFps v1.2 — TeamKit.fr
 ///
 /// Framerate serveur adaptatif pour Nova-Life : réduit la consommation CPU
 /// quand le serveur est vide ou chargé, sans toucher au confort des joueurs.
@@ -44,8 +44,7 @@ public class TKDynamicFps : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.1 désactivé par config");
-            return;
+            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.2 désactivé par config (réactivable depuis le panel)");
         }
         try
         {
@@ -53,7 +52,8 @@ public class TKDynamicFps : Plugin
             UnityEngine.Object.DontDestroyOnLoad(go);
             TKDynamicFpsTicker ticker = go.AddComponent<TKDynamicFpsTicker>();
             ticker.config = config;
-            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.1 initialisé (idle "
+            ticker.plugin = this;
+            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.2 initialisé (idle "
                 + config.idleFps + " / base " + config.minPlayersFps + " / max " + config.maxFps
                 + " FPS, seuils CPU " + config.cpuLowPercent + "-" + config.cpuHighPercent
                 + "% sur " + config.allocatedCores + " cœurs)");
@@ -61,6 +61,45 @@ public class TKDynamicFps : Plugin
         catch (Exception ex)
         {
             Debug.LogError("[TKFPS] Impossible de démarrer le ticker : " + ex.Message);
+        }
+    }
+
+    private string configPathSaved;
+    private string lastConfigJson;
+
+    // Relit config.json s'il a changé (modifié depuis le panel web) — à chaud.
+    public void ReloadConfig()
+    {
+        try
+        {
+            if (configPathSaved == null || !File.Exists(configPathSaved))
+            {
+                return;
+            }
+            string txt = File.ReadAllText(configPathSaved);
+            if (txt == lastConfigJson)
+            {
+                return;
+            }
+            lastConfigJson = txt;
+            TKDynamicFpsConfig c = TKDynamicFpsConfig.FromJson(txt);
+            config.enabled = c.enabled;
+            config.idleFps = c.idleFps;
+            config.minPlayersFps = c.minPlayersFps;
+            config.maxFps = c.maxFps;
+            config.cpuHighPercent = c.cpuHighPercent;
+            config.cpuLowPercent = c.cpuLowPercent;
+            config.allocatedCores = c.allocatedCores;
+            config.intervalSeconds = c.intervalSeconds;
+            config.stepFps = c.stepFps;
+            config.logChanges = c.logChanges;
+            Debug.Log("[TKFPS] Config rechargée (panel) : actif=" + config.enabled
+                + ", idle " + config.idleFps + " / base " + config.minPlayersFps + " / max " + config.maxFps
+                + " FPS, CPU " + config.cpuLowPercent + "-" + config.cpuHighPercent + "%");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKFPS] Erreur rechargement config : " + ex.Message);
         }
     }
 
@@ -78,12 +117,16 @@ public class TKDynamicFps : Plugin
             {
                 config = new TKDynamicFpsConfig();
                 File.WriteAllText(configPath, TKDynamicFpsConfig.ToJson(config));
+                configPathSaved = configPath;
+                lastConfigJson = TKDynamicFpsConfig.ToJson(config);
                 Debug.Log("[TKFPS] config.json créé : " + configPath);
             }
             else
             {
                 config = TKDynamicFpsConfig.FromJson(File.ReadAllText(configPath));
                 File.WriteAllText(configPath, TKDynamicFpsConfig.ToJson(config));
+                configPathSaved = configPath;
+                lastConfigJson = TKDynamicFpsConfig.ToJson(config);
                 Debug.Log("[TKFPS] config.json chargé");
             }
         }
@@ -101,6 +144,8 @@ public class TKDynamicFpsTicker : MonoBehaviour
     public static TKDynamicFpsTicker Instance;
 
     public TKDynamicFpsConfig config;
+    public TKDynamicFps plugin;
+    private float reloadAccum;
     // > 0 : framerate forcé (via panel) ; -1 : mode automatique
     public int forcedFps = -1;
     public int desiredFps = -1;
@@ -144,6 +189,23 @@ public class TKDynamicFpsTicker : MonoBehaviour
     {
         if (config == null)
         {
+            return;
+        }
+        reloadAccum += Time.unscaledDeltaTime;
+        if (reloadAccum >= 20f)
+        {
+            reloadAccum = 0f;
+            if (plugin != null)
+            {
+                plugin.ReloadConfig();
+            }
+        }
+        if (!config.enabled)
+        {
+            if (Application.targetFrameRate != config.maxFps)
+            {
+                Application.targetFrameRate = config.maxFps;
+            }
             return;
         }
 

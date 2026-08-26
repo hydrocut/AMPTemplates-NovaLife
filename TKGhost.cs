@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKGhost v1.0 — TeamKit.fr
+/// TKGhost v1.1 — TeamKit.fr
 ///
 /// Optimisation FPS client : transforme automatiquement en « fantômes »
 /// les véhicules abandonnés dans le monde.
@@ -50,8 +50,7 @@ public class TKGhost : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKGHOST] Plugin TKGhost v1.0 désactivé par config");
-            return;
+            Debug.Log("[TKGHOST] Plugin TKGhost v1.1 désactivé par config (réactivable depuis le panel)");
         }
         try
         {
@@ -59,13 +58,47 @@ public class TKGhost : Plugin
             UnityEngine.Object.DontDestroyOnLoad(go);
             TKGhostTicker ticker = go.AddComponent<TKGhostTicker>();
             ticker.config = config;
-            Debug.Log("[TKGHOST] Plugin TKGhost v1.0 initialisé (fantôme après "
+            ticker.plugin = this;
+            Debug.Log("[TKGHOST] Plugin TKGhost v1.1 initialisé (fantôme après "
                 + config.ghostAfterMinutes + " min d'immobilité, rayon joueurs "
                 + config.playerRadiusMeters + " m)");
         }
         catch (Exception ex)
         {
             Debug.LogError("[TKGHOST] Impossible de démarrer le ticker : " + ex.Message);
+        }
+    }
+
+    private string configPathSaved;
+    private string lastConfigJson;
+
+    // Relit config.json s'il a changé (modifié depuis le panel web) — à chaud.
+    public void ReloadConfig()
+    {
+        try
+        {
+            if (configPathSaved == null || !File.Exists(configPathSaved))
+            {
+                return;
+            }
+            string txt = File.ReadAllText(configPathSaved);
+            if (txt == lastConfigJson)
+            {
+                return;
+            }
+            lastConfigJson = txt;
+            TKGhostConfig c = TKGhostConfig.FromJson(txt);
+            config.enabled = c.enabled;
+            config.ghostAfterMinutes = c.ghostAfterMinutes;
+            config.playerRadiusMeters = c.playerRadiusMeters;
+            config.checkIntervalSeconds = c.checkIntervalSeconds;
+            config.logChanges = c.logChanges;
+            Debug.Log("[TKGHOST] Config rechargée (panel) : actif=" + config.enabled
+                + ", fantôme après " + config.ghostAfterMinutes + " min, rayon " + config.playerRadiusMeters + " m");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKGHOST] Erreur rechargement config : " + ex.Message);
         }
     }
 
@@ -83,12 +116,16 @@ public class TKGhost : Plugin
             {
                 config = new TKGhostConfig();
                 File.WriteAllText(configPath, TKGhostConfig.ToJson(config));
+                configPathSaved = configPath;
+                lastConfigJson = TKGhostConfig.ToJson(config);
                 Debug.Log("[TKGHOST] config.json créé : " + configPath);
             }
             else
             {
                 config = TKGhostConfig.FromJson(File.ReadAllText(configPath));
                 File.WriteAllText(configPath, TKGhostConfig.ToJson(config));
+                configPathSaved = configPath;
+                lastConfigJson = TKGhostConfig.ToJson(config);
             }
         }
         catch (Exception ex)
@@ -102,6 +139,8 @@ public class TKGhost : Plugin
 public class TKGhostTicker : MonoBehaviour
 {
     public TKGhostConfig config;
+    public TKGhost plugin;
+    private float reloadAccum;
 
     private class Track
     {
@@ -115,6 +154,19 @@ public class TKGhostTicker : MonoBehaviour
     private void Update()
     {
         if (config == null)
+        {
+            return;
+        }
+        reloadAccum += Time.unscaledDeltaTime;
+        if (reloadAccum >= 20f)
+        {
+            reloadAccum = 0f;
+            if (plugin != null)
+            {
+                plugin.ReloadConfig();
+            }
+        }
+        if (!config.enabled)
         {
             return;
         }

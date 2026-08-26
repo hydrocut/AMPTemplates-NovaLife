@@ -118,7 +118,7 @@ input:focus{outline:none;border-color:var(--accent)}
 .pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
 .plugitem{display:flex;justify-content:space-between;gap:8px;background:#0f1420;border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
 .plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.cfgrow{display:flex;align-items:center;gap:8px;margin:6px 0}.cfgrow label{flex:1;font-size:12px;color:var(--muted)}.cfgrow input{width:110px;background:#0f1420;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px}
 .gl{width:64px;text-align:right;font-size:12px}
 button.chip{display:inline-flex;align-items:center;gap:6px;min-width:200px;justify-content:flex-start;padding:6px 12px}
 button.chip img{width:26px;height:26px;object-fit:contain}
@@ -1492,11 +1492,54 @@ var PLUG_SUITE = [
   ['TKConnectLog.dll','Journal des connexions : historique des arriv\u00e9es/d\u00e9parts des joueurs.'],
   ['TeamKitIntro.dll','\u00c9cran d\u2019intro TeamKit \u00e0 la connexion des joueurs.']
 ];
+var PLUG_CFG = {
+  'TKGhost': [['enabled','b','Activé'],['ghostAfterMinutes','n','Fantôme après (min d’immobilité)'],['playerRadiusMeters','n','Rayon joueurs (m)'],['checkIntervalSeconds','n','Période de contrôle (s)']],
+  'TKDynamicFps': [['enabled','b','FPS adaptatif activé'],['idleFps','n','FPS serveur vide'],['minPlayersFps','n','FPS de base (avec joueurs)'],['maxFps','n','FPS maximum'],['cpuLowPercent','n','CPU bas (%) : monte les FPS'],['cpuHighPercent','n','CPU haut (%) : baisse les FPS']],
+  'TKAntiFlood': [['enabled','b','Activé'],['maxAttempts','n','Connexions max par fenêtre'],['windowSeconds','n','Fenêtre (s)'],['banMinutes','n','Durée du ban (min, 0 = permanent)'],['whitelist','s','IP jamais bloquées (virgules)']],
+  'TKAntiCheat': [['moneyAlertThreshold','n','Alerte argent au-delà de (€)'],['maxSpeed','n','Vitesse max au sol (m/s)'],['spamThreshold','n','Anti-spam : actions max'],['spamWindowSeconds','n','Anti-spam : fenêtre (s)']]
+};
 function plugInfo(i, present){
   var sd = PLUG_SUITE[i];
-  openModal('<h3><span class="pdot ' + (present?'on':'off') + '" style="margin-right:8px"></span>' + sd[0].replace('.dll','') + '</h3>'
+  var pname = sd[0].replace('.dll','');
+  var h = '<h3><span class="pdot ' + (present?'on':'off') + '" style="margin-right:8px"></span>' + pname + '</h3>'
     + '<p style="margin:10px 0;line-height:1.5">' + sd[1] + '</p>'
-    + '<p class="muted" style="font-size:12px">' + (present?'Pr\u00e9sent sur le serveur':'Absent du serveur \u2014 sera r\u00e9install\u00e9 par la prochaine mise \u00e0 jour AMP') + '</p>');
+    + '<p class="muted" style="font-size:12px">' + (present?'Présent sur le serveur':'Absent du serveur — sera réinstallé par la prochaine mise à jour AMP') + '</p>';
+  if(present && PLUG_CFG[pname]) h += '<div id="plugcfg" class="muted" style="font-size:12px;margin-top:10px">Chargement des réglages…</div>';
+  openModal(h);
+  if(present && PLUG_CFG[pname]) loadPlugCfg(pname);
+}
+function loadPlugCfg(pname){
+  api('plugconfig?name=' + pname).then(function(r){
+    var el = document.getElementById('plugcfg');
+    if(!el) return;
+    if(r.error){ el.innerHTML = ''; return; }
+    var h = '<h4 style="margin:8px 0 4px;color:var(--accent);font-size:13px">Réglages <span class="muted" style="font-weight:400">— appliqués sous ~30 s, sans restart</span></h4>';
+    (PLUG_CFG[pname]||[]).forEach(function(d){
+      var k=d[0], t=d[1], lab=d[2]; var v=r.values[k];
+      if(v===undefined) return;
+      if(t==='b'){
+        h += '<div class="switch' + (v?' on':'') + '" data-pk="' + k + '" data-pv="' + (v?0:1) + '"><span class="sw"></span><span>' + lab + '</span></div><br>';
+      } else {
+        h += '<div class="cfgrow"><label>' + lab + '</label><input data-pi="' + k + '" type="' + (t==='n'?'number':'text') + '" value="' + esc(String(v)) + '"><button data-ps="' + k + '">OK</button></div>';
+      }
+    });
+    el.innerHTML = h; el.classList.remove('muted');
+    el.querySelectorAll('[data-pk]').forEach(function(sw){
+      sw.onclick = function(){ plugSet(pname, sw.getAttribute('data-pk'), sw.getAttribute('data-pv')); };
+    });
+    el.querySelectorAll('[data-ps]').forEach(function(btn){
+      btn.onclick = function(){
+        var k = btn.getAttribute('data-ps');
+        var inp = el.querySelector('[data-pi="' + k + '"]');
+        if(inp) plugSet(pname, k, inp.value);
+      };
+    });
+  }).catch(function(){});
+}
+function plugSet(pname, key, value){
+  api('plugset', {plugin: pname, key: key, value: String(value)}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Réglage enregistré (actif sous ~30 s)'); loadPlugCfg(pname); }
+  });
 }
 function loadPlugins(){
   api('plugins').then(function(r){
