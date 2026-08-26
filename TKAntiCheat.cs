@@ -251,20 +251,72 @@ public class TKAntiCheat : Plugin
         }
     }
 
+    private class AdminRow
+    {
+        public string SteamId { get; set; }
+    }
+
     private void BuildAdminWhitelist()
     {
         adminWhitelist = new HashSet<string>();
-        if (config == null || string.IsNullOrEmpty(config.adminWhitelist))
+        if (config == null)
         {
             return;
         }
-        foreach (string raw in config.adminWhitelist.Split(','))
+        // Première init : apprend les admins DÉJÀ présents en base (staff légitime)
+        // pour ne pas les alerter, et persiste la liste dans la config.
+        if (string.IsNullOrEmpty(config.adminWhitelist))
+        {
+            try
+            {
+                string db = Path.GetFullPath(Path.Combine(pluginDir, "..", "..", "life.db"));
+                if (File.Exists(db))
+                {
+                    SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(db, SQLite.SQLiteOpenFlags.ReadOnly, false);
+                    try
+                    {
+                        List<string> ids = new List<string>();
+                        foreach (AdminRow r in conn.Query<AdminRow>("SELECT SteamId FROM Accounts WHERE AdminLevel > 0"))
+                        {
+                            if (!string.IsNullOrEmpty(r.SteamId))
+                            {
+                                ids.Add(r.SteamId);
+                            }
+                        }
+                        config.adminWhitelist = string.Join(",", ids.ToArray());
+                        SaveConfig();
+                        Debug.Log("[TKAC] Liste blanche admin initialisée depuis la base : " + ids.Count + " admin(s) légitime(s)");
+                    }
+                    finally
+                    {
+                        conn.Close();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[TKAC] Init liste blanche admin : " + ex.Message);
+            }
+        }
+        foreach (string raw in (config.adminWhitelist ?? "").Split(','))
         {
             string id = raw.Trim();
             if (id.Length > 0)
             {
                 adminWhitelist.Add(id);
             }
+        }
+    }
+
+    private void SaveConfig()
+    {
+        try
+        {
+            File.WriteAllText(Path.Combine(pluginDir, "config.json"), TKAntiCheatConfig.ToJson(config));
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKAC] Erreur écriture config : " + ex.Message);
         }
     }
 

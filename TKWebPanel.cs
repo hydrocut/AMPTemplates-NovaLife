@@ -327,7 +327,7 @@ public class TKWebPanel : Plugin
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
             StartAutoBackup();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.8 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.8.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -2868,6 +2868,48 @@ public class TKWebPanel : Plugin
         }
     }
 
+    // Garde l'anti-cheat en phase : un admin promu par le panel est légitime
+    private static void SyncAntiCheatWhitelist(string steamId, bool add)
+    {
+        try
+        {
+            string cfg = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiCheat"), "config.json");
+            if (!File.Exists(cfg))
+            {
+                return;
+            }
+            string json = File.ReadAllText(cfg);
+            Match m = Regex.Match(json, "\"adminWhitelist\"\\s*:\\s*\"(?<v>(?:\\\\.|[^\"])*)\"");
+            if (!m.Success)
+            {
+                return;
+            }
+            List<string> ids = new List<string>(m.Groups["v"].Value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
+            for (int i = 0; i < ids.Count; i++) ids[i] = ids[i].Trim();
+            bool changed = false;
+            if (add && !ids.Contains(steamId))
+            {
+                ids.Add(steamId);
+                changed = true;
+            }
+            else if (!add && ids.Contains(steamId))
+            {
+                ids.Remove(steamId);
+                changed = true;
+            }
+            if (changed)
+            {
+                string updated = json.Substring(0, m.Groups["v"].Index)
+                    + string.Join(",", ids.ToArray())
+                    + json.Substring(m.Groups["v"].Index + m.Groups["v"].Length);
+                File.WriteAllText(cfg, updated);
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private string ApiSetAdmin(string body)
     {
         string steamId = Json.GetString(body, "steamId", "");
@@ -2899,6 +2941,7 @@ public class TKWebPanel : Plugin
             {
             }
             Debug.Log("[TKWEB] SETADMIN steamid=" + steamId + " niveau=" + level + " (en ligne)");
+            SyncAntiCheatWhitelist(steamId, level > 0);
             StaffLog("niveau admin " + level + " pour " + steamId);
             return "{\"ok\":true,\"online\":true}";
         });
@@ -2918,6 +2961,7 @@ public class TKWebPanel : Plugin
         }
         bool saved = LifeDB.SaveAccount(account).Result;
         Debug.Log("[TKWEB] SETADMIN steamid=" + steamId + " niveau=" + level + " (hors ligne)");
+        SyncAntiCheatWhitelist(steamId, level > 0);
         StaffLog("niveau admin " + level + " pour " + steamId + " (hors ligne)");
         return saved ? "{\"ok\":true,\"online\":false}" : "{\"error\":\"échec sauvegarde\"}";
     }
