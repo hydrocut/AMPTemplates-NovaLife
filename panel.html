@@ -335,6 +335,22 @@ button.chip img{width:26px;height:26px;object-fit:contain}
   </section>
 
   <section data-tab="monde" class="need-owner">
+    <h2>Test de charge FPS <span class="muted" style="font-weight:400;font-size:12px">— spawn massif de véhicules pour comparer avec / sans fantômes (serveur de dev conseillé)</span></h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
+      <select id="bench-player" style="min-width:160px"></select>
+      <input id="bench-count" type="number" value="30" min="1" max="40" style="width:70px">
+      <button class="primary" onclick="benchSpawn()">Spawner autour du joueur</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+      <button onclick="benchGhost()">Tout passer en fantôme</button>
+      <button onclick="benchReal()">Tout rendre réel</button>
+      <button class="danger" onclick="if(confirm('Supprimer tous les véhicules de test ?'))benchClear()">Supprimer les véhicules de test</button>
+    </div>
+    <p id="bench-status" class="muted" style="font-size:12px">—</p>
+    <p class="muted" style="font-size:12px">Protocole : spawn, place-toi au milieu, note tes FPS en jeu ; « Tout passer en fantôme », re-note ; compare. Les fantômes redeviennent réels dès qu'un joueur clique dessus.</p>
+  </section>
+
+  <section data-tab="monde" class="need-owner">
     <h2>Sauvegardes de la base <span class="muted" style="font-weight:400;font-size:12px">— à chaud, sans couper le serveur · auto toutes les 6 h, gardées 14 jours</span></h2>
     <div class="row" style="margin-bottom:10px">
       <button class="primary" onclick="backupNow()">Sauvegarder maintenant</button>
@@ -990,7 +1006,7 @@ function showTab(name){
   });
   localStorage.setItem('tkweb_tab', name);
   if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3) loadPanelUsers(); }
-  if(name === 'monde'){ loadPlugins(); if(myLevel() >= 3) loadBackups(); }
+  if(name === 'monde'){ loadPlugins(); if(myLevel() >= 3){ loadBackups(); loadBench(); } }
   if(name === 'securite' && myLevel() >= 3) loadAcConfig();
   if(name === 'chat') chatScrollBottom();
 }
@@ -1580,6 +1596,48 @@ function loadPlugins(){
     document.getElementById('plugins-tk').innerHTML = tk;
     document.getElementById('plugins-other').innerHTML = rest || '<span class="muted">Aucun</span>';
   }).catch(function(){});
+}
+
+// --- Test de charge FPS (owner) ---
+function loadBench(){
+  var sel = document.getElementById('bench-player');
+  if(sel){
+    var cur = sel.value;
+    sel.innerHTML = playersCache.length
+      ? playersCache.map(function(p){ return '<option value="' + p.steamId + '">' + esc(p.pseudo) + '</option>'; }).join('')
+      : '<option value="">(aucun joueur en ligne)</option>';
+    if(cur) sel.value = cur;
+  }
+  api('benchstatus').then(function(r){
+    var el = document.getElementById('bench-status');
+    if(!el || r.error) return;
+    el.textContent = r.total === 0 ? 'Aucun véhicule de test.'
+      : r.total + ' véhicule(s) de test — ' + r.real + ' réel(s), ' + r.ghosts + ' fantôme(s)' + (r.missing ? ', ' + r.missing + ' introuvable(s)' : '');
+  }).catch(function(){});
+}
+function benchSpawn(){
+  var sid = document.getElementById('bench-player').value;
+  if(!sid) return toast('Aucun joueur en ligne', true);
+  var n = parseInt(document.getElementById('bench-count').value, 10) || 20;
+  toast('Spawn en cours…');
+  api('benchspawn', {steamId: sid, count: n}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast(r.spawned + ' véhicule(s) spawné(s)'); loadBench(); }
+  });
+}
+function benchGhost(){
+  api('benchghost', {}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast(r.ghosted + ' passé(s) en fantôme' + (r.skipped ? ', ' + r.skipped + ' refusé(s)' : '')); loadBench(); }
+  });
+}
+function benchReal(){
+  api('benchreal', {}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast(r.restored + ' redevenu(s) réel(s)'); loadBench(); }
+  });
+}
+function benchClear(){
+  api('benchclear', {}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast(r.removed + ' véhicule(s) supprimé(s)'); loadBench(); }
+  });
 }
 
 // --- Sauvegardes (owner) ---

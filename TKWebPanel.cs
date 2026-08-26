@@ -327,7 +327,7 @@ public class TKWebPanel : Plugin
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
             StartAutoBackup();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.10.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.11 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -691,6 +691,11 @@ public class TKWebPanel : Plugin
             case "/api/acset":
             case "/api/plugconfig":
             case "/api/plugset":
+            case "/api/benchspawn":
+            case "/api/benchghost":
+            case "/api/benchreal":
+            case "/api/benchclear":
+            case "/api/benchstatus":
                 return 3;
             // modo autorisé (consultation + modération légère)
             case "/api/status":
@@ -812,6 +817,16 @@ public class TKWebPanel : Plugin
                 return ApiPlugConfig(ctx.Request.QueryString["name"]);
             case "/api/plugset":
                 return ApiPlugSet(body);
+            case "/api/benchspawn":
+                return ApiBenchSpawn(body);
+            case "/api/benchghost":
+                return ApiBenchGhost();
+            case "/api/benchreal":
+                return ApiBenchReal();
+            case "/api/benchclear":
+                return ApiBenchClear();
+            case "/api/benchstatus":
+                return ApiBenchStatus();
             case "/api/history":
                 return ApiHistory();
             case "/api/offlineinv":
@@ -3651,6 +3666,276 @@ public class TKWebPanel : Plugin
         {
             return "{\"error\":" + Json.Str(ex.Message) + "}";
         }
+    }
+
+    // --- Test de charge FPS : véhicules de test spawnés en masse (owner) ---
+    private string BenchFile()
+    {
+        return Path.Combine(pluginDir, "bench.json");
+    }
+
+    private List<int> LoadBenchIds()
+    {
+        List<int> ids = new List<int>();
+        try
+        {
+            if (File.Exists(BenchFile()))
+            {
+                foreach (Match m in Regex.Matches(File.ReadAllText(BenchFile()), "[0-9]+"))
+                {
+                    ids.Add(int.Parse(m.Value));
+                }
+            }
+        }
+        catch
+        {
+        }
+        return ids;
+    }
+
+    private void SaveBenchIds(List<int> ids)
+    {
+        try
+        {
+            File.WriteAllText(BenchFile(), "[" + string.Join(",", ids.ConvertAll(delegate (int i) { return i.ToString(); }).ToArray()) + "]");
+        }
+        catch
+        {
+        }
+    }
+
+    private string ApiBenchSpawn(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        int count = Json.GetInt(body, "count", 20);
+        if (count < 1) count = 1;
+        if (count > 40) count = 40;
+        object ctxObj = RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.setup == null || p.character == null)
+            {
+                return null;
+            }
+            int nm = Nova.v != null && Nova.v.vehiclesModelName != null ? Nova.v.vehiclesModelName.Length : 0;
+            return (object)new object[] { p.setup.transform.position, p.character.Id, nm };
+        });
+        if (ctxObj == null)
+        {
+            return "{\"error\":\"joueur introuvable ou pas en jeu\"}";
+        }
+        object[] ctx2 = (object[])ctxObj;
+        Vector3 basePos = (Vector3)ctx2[0];
+        int charId = (int)ctx2[1];
+        int nModels = (int)ctx2[2];
+        if (nModels <= 0)
+        {
+            return "{\"error\":\"liste des modèles indisponible\"}";
+        }
+        string permJson = "{\"owner\":{\"characterId\":" + charId + ",\"groupId\":0},\"coOwners\":[]}";
+        List<Vehicles> rows = new List<Vehicles>();
+        for (int i = 0; i < count; i++)
+        {
+            int modelId = i % Math.Min(nModels, 12); // varie les 12 premiers modèles
+            try
+            {
+                Vehicles row = LifeDB.CreateVehicle(modelId, permJson).Result;
+                if (row != null)
+                {
+                    rows.Add(row);
+                }
+            }
+            catch
+            {
+            }
+        }
+        if (rows.Count == 0)
+        {
+            return "{\"error\":\"échec création en base\"}";
+        }
+        string result = (string)RunOnMain(delegate
+        {
+            List<int> ids = LoadBenchIds();
+            int spawned = 0;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                Vehicles row = rows[i];
+                if (Nova.v.GetVehicle(row.Id) == null)
+                {
+                    Nova.v.vehicles.Add(new LifeVehicle
+                    {
+                        modelId = row.ModelId,
+                        vehicleId = row.Id,
+                        permissions = JsonUtility.FromJson<Permissions>(row.Permissions),
+                        plate = row.Plate,
+                        isStowed = true,
+                        inventory = row.Inventory,
+                        engineInventory = row.EngineInventory,
+                        color = row.Color,
+                        smoothness = row.Smoothness,
+                        x = row.X,
+                        y = row.Y,
+                        z = row.Z,
+                        rotX = row.RotX,
+                        rotY = row.RotY,
+                        rotZ = row.RotZ,
+                        bizId = row.BizId,
+                        damages = row.Damages,
+                        fuel = row.Fuel,
+                        serigraphie = row.Serigraphie,
+                        eurosoftData = row.EurosoftData,
+                        accessoriesData = row.AccessoriesData
+                    });
+                }
+                // grille 6 par rangée, 6 m d'espacement, à ~10 m devant le joueur
+                Vector3 pos = basePos + new Vector3((i % 6) * 6f - 15f, 0.5f, (i / 6) * 6f + 10f);
+                bool ok = false;
+                try { ok = Nova.v.UnstowVehicle(row.Id, pos, Quaternion.identity); } catch { }
+                ids.Add(row.Id);
+                if (ok)
+                {
+                    spawned++;
+                }
+            }
+            SaveBenchIds(ids);
+            StaffLog("test de charge : spawn de " + spawned + " véhicules près de " + steamId);
+            Debug.Log("[TKWEB] BENCH spawn " + spawned + "/" + rows.Count + " véhicules (total test " + ids.Count + ")");
+            return "{\"ok\":true,\"spawned\":" + spawned + ",\"total\":" + ids.Count + "}";
+        });
+        return result;
+    }
+
+    private string ApiBenchGhost()
+    {
+        return (string)RunOnMain(delegate
+        {
+            List<int> ids = LoadBenchIds();
+            int done = 0, skipped = 0;
+            foreach (int id in ids)
+            {
+                LifeVehicle lv = Nova.v.GetVehicle(id);
+                if (lv != null && lv.instance != null && lv.fake == null && !lv.isStowed)
+                {
+                    bool ok = false;
+                    try { ok = Nova.v.TryReplaceCarWithFake(lv.instance, false, false); } catch { }
+                    if (ok) done++; else skipped++;
+                }
+            }
+            StaffLog("test de charge : " + done + " véhicules passés en fantôme");
+            return "{\"ok\":true,\"ghosted\":" + done + ",\"skipped\":" + skipped + "}";
+        });
+    }
+
+    private string ApiBenchReal()
+    {
+        return (string)RunOnMain(delegate
+        {
+            List<int> ids = LoadBenchIds();
+            int done = 0;
+            foreach (int id in ids)
+            {
+                LifeVehicle lv = Nova.v.GetVehicle(id);
+                if (lv != null && lv.fake != null)
+                {
+                    try { Nova.v.TryReplaceFakeWithCar(id); done++; } catch { }
+                }
+            }
+            StaffLog("test de charge : " + done + " fantômes redevenus réels");
+            return "{\"ok\":true,\"restored\":" + done + "}";
+        });
+    }
+
+    private string ApiBenchClear()
+    {
+        List<int> ids = LoadBenchIds();
+        if (ids.Count == 0)
+        {
+            return "{\"ok\":true,\"removed\":0}";
+        }
+        // 1) despawn du monde (main thread)
+        RunOnMain(delegate
+        {
+            foreach (int id in ids)
+            {
+                LifeVehicle lv = Nova.v.GetVehicle(id);
+                if (lv == null)
+                {
+                    continue;
+                }
+                try
+                {
+                    if (lv.fake != null)
+                    {
+                        Nova.v.TryReplaceFakeWithCar(id);
+                    }
+                    if (!lv.isStowed)
+                    {
+                        Nova.v.StowVehicle(id);
+                    }
+                }
+                catch
+                {
+                }
+            }
+            return (object)null;
+        });
+        // 2) suppression en base (hors main thread)
+        int removed = 0;
+        foreach (int id in ids)
+        {
+            try
+            {
+                if (LifeDB.RemoveVehicle(id).Result)
+                {
+                    removed++;
+                }
+            }
+            catch
+            {
+            }
+        }
+        // 3) retrait de la liste mémoire
+        return (string)RunOnMain(delegate
+        {
+            foreach (int id in ids)
+            {
+                LifeVehicle lv = Nova.v.GetVehicle(id);
+                if (lv != null)
+                {
+                    Nova.v.vehicles.Remove(lv);
+                }
+            }
+            SaveBenchIds(new List<int>());
+            StaffLog("test de charge : " + removed + " véhicules de test supprimés");
+            Debug.Log("[TKWEB] BENCH clear " + removed + " véhicules");
+            return "{\"ok\":true,\"removed\":" + removed + "}";
+        });
+    }
+
+    private string ApiBenchStatus()
+    {
+        return (string)RunOnMain(delegate
+        {
+            List<int> ids = LoadBenchIds();
+            int real = 0, ghosts = 0, missing = 0;
+            foreach (int id in ids)
+            {
+                LifeVehicle lv = Nova.v.GetVehicle(id);
+                if (lv == null)
+                {
+                    missing++;
+                }
+                else if (lv.fake != null)
+                {
+                    ghosts++;
+                }
+                else if (lv.instance != null)
+                {
+                    real++;
+                }
+            }
+            return "{\"total\":" + ids.Count + ",\"real\":" + real + ",\"ghosts\":" + ghosts + ",\"missing\":" + missing + "}";
+        });
     }
 
     private string ApiAntiCheat()
