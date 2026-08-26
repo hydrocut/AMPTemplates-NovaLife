@@ -328,7 +328,7 @@ public class TKWebPanel : Plugin
             LoadPanelUsers();
             StartAutoBackup();
         StartSericache();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.13.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.14 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -826,6 +826,8 @@ public class TKWebPanel : Plugin
                 return ApiPlugSet(body);
             case "/api/acwl":
                 return ApiAcWl(body);
+            case "/api/banip":
+                return ApiBanIp(body);
             case "/api/benchspawn":
                 return ApiBenchSpawn(body);
             case "/api/benchghost":
@@ -3532,6 +3534,9 @@ public class TKWebPanel : Plugin
             sb.Append("\"adminProtection\":").Append(Json.GetBool(json, "adminProtection", true) ? "true" : "false");
             sb.Append(",\"adminAutoReset\":").Append(Json.GetBool(json, "adminAutoReset", false) ? "true" : "false");
             sb.Append(",\"adminKick\":").Append(Json.GetBool(json, "adminKick", false) ? "true" : "false");
+            sb.Append(",\"spoofCheck\":").Append(Json.GetBool(json, "spoofCheck", true) ? "true" : "false");
+            sb.Append(",\"adminIpGuard\":").Append(Json.GetBool(json, "adminIpGuard", false) ? "true" : "false");
+            sb.Append(",\"adminIpKick\":").Append(Json.GetBool(json, "adminIpKick", false) ? "true" : "false");
             sb.Append(",\"spamEnabled\":").Append(Json.GetBool(json, "spamEnabled", true) ? "true" : "false");
             sb.Append(",\"spamKick\":").Append(Json.GetBool(json, "spamKick", true) ? "true" : "false");
             sb.Append(",\"enabled\":").Append(Json.GetBool(json, "enabled", true) ? "true" : "false");
@@ -3552,7 +3557,7 @@ public class TKWebPanel : Plugin
     {
         string key = Json.GetString(body, "key", "");
         bool value = Json.GetBool(body, "value", false);
-        string[] allowed = { "adminProtection", "adminAutoReset", "adminKick", "spamEnabled", "spamKick", "enabled" };
+        string[] allowed = { "adminProtection", "adminAutoReset", "adminKick", "spamEnabled", "spamKick", "enabled", "spoofCheck", "spoofKick", "adminIpGuard", "adminIpKick" };
         if (Array.IndexOf(allowed, key) < 0)
         {
             return "{\"error\":\"réglage inconnu\"}";
@@ -4222,6 +4227,64 @@ public class TKWebPanel : Plugin
         catch
         {
             try { ctx.Response.StatusCode = 500; ctx.Response.OutputStream.Close(); } catch { }
+        }
+    }
+
+    // Ban IP d'un joueur en ligne : écrit dans TKAntiFlood/banned.txt (permanent)
+    // et déconnecte le joueur. TKAntiFlood v1.2 recharge le fichier à chaud.
+    private string ApiBanIp(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        object ipObj = RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.conn == null)
+            {
+                return null;
+            }
+            string a = null;
+            try
+            {
+                NetworkConnectionToClient toClient = p.conn as NetworkConnectionToClient;
+                a = toClient != null ? toClient.address : null;
+            }
+            catch { }
+            try { p.Disconnect("Bannissement IP"); } catch { }
+            return (object)a;
+        });
+        if (ipObj == null)
+        {
+            return "{\"error\":\"joueur introuvable (il doit être en ligne pour récupérer son IP)\"}";
+        }
+        string ip = (string)ipObj;
+        if (ip.StartsWith("::ffff:"))
+        {
+            ip = ip.Substring(7);
+        }
+        int colon = ip.LastIndexOf(':');
+        if (colon > 0 && ip.IndexOf('.') > 0 && colon > ip.IndexOf('.'))
+        {
+            ip = ip.Substring(0, colon);
+        }
+        if (!Regex.IsMatch(ip, "^[0-9a-fA-F.:]+$") || ip == "127.0.0.1" || ip == "::1")
+        {
+            return "{\"error\":\"IP invalide\"}";
+        }
+        try
+        {
+            string f = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiFlood"), "banned.txt");
+            string existing = File.Exists(f) ? File.ReadAllText(f) : "";
+            if (!existing.Contains(ip + ";"))
+            {
+                File.AppendAllText(f, (existing.Length > 0 && !existing.EndsWith("\n") ? "\n" : "") + ip + ";0\n");
+            }
+            StaffLog("bannit l'IP " + ip + " (" + steamId + ")");
+            Debug.Log("[TKWEB] BANIP " + ip + " (" + steamId + ")");
+            return "{\"ok\":true,\"ip\":" + Json.Str(ip) + "}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
         }
     }
 

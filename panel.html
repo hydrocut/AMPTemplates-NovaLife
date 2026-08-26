@@ -551,6 +551,7 @@ function playerActions(id){
   b += '<button onclick="closeModal();garageBySteam(\'' + id + '\',\'' + esc(who) + '\')">🚗 Garage</button>';
   b += '<button onclick="closeModal();localMsgPlayer(\'' + id + '\')">📍 Message local</button>';
   b += '<button class="danger" onclick="closeModal();kickPlayer(\'' + id + '\')">Kick</button>';
+  b += '<button class="danger" onclick="closeModal();if(confirm(\'Bannir l’IP de ce joueur ? Il sera déconnecté et son IP bloquée définitivement au niveau réseau.\'))banIp(\'' + id + '\')">Ban IP</button>';
   b += '<button class="danger" onclick="closeModal();banPlayer(\'' + id + '\')">Ban</button>';
   openModal('<h3>' + esc(who) + '</h3>' + b);
 }
@@ -683,6 +684,11 @@ function kickPlayer(id){
   act('kick', {steamId: id, reason: reason}, 'Joueur kické');
 }
 
+function banIp(steamId){
+  api('banip', {steamId: steamId}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('IP ' + r.ip + ' bannie (anti-flood)'); }
+  });
+}
 function banPlayer(id){
   var reason = prompt('Raison du ban :', '');
   if(reason === null) return;
@@ -1511,6 +1517,9 @@ function loadAcConfig(){
       sw('adminProtection', 'Protection des comptes admin', c.adminProtection, '— alerte si un joueur obtient admin sans autorisation') +
       sw('adminAutoReset', 'Retrait automatique des droits', c.adminAutoReset, '— retire aussitôt l’admin non autorisé (recommandé après vérif)') +
       sw('adminKick', 'Kick auto des faux admins', c.adminKick, '— éjecte le joueur détecté avec un niveau admin non autorisé') +
+      sw('spoofCheck', 'Anti-usurpation SteamID', c.spoofCheck, '— kick si deux connexions utilisent le même SteamID (spoof)') +
+      sw('adminIpGuard', 'Garde IP des comptes admin', c.adminIpGuard, '— alerte si un admin se connecte depuis une IP jamais vue') +
+      sw('adminIpKick', 'Kick si IP admin inconnue', c.adminIpKick, '— à activer une fois les IP habituelles apprises') +
       sw('spamKick', 'Kick auto des spammeurs', c.spamKick, '— commandes/chat en rafale') +
       sw('enabled', 'Anti-cheat activé (global)', c.enabled, '') +
       '<div class="muted" style="margin-top:8px;font-size:12px">' + c.whitelistCount + ' admin(s) en liste blanche · argent alerte > ' + Number(c.moneyThreshold).toLocaleString('fr-FR') + ' · vitesse max ' + c.maxSpeed + ' m/s · modifs appliquées sous ~20 s</div>';

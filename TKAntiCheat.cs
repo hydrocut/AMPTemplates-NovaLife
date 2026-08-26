@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.5 — TeamKit.fr
+/// TKAntiCheat v1.6 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -64,10 +64,11 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.5 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.6 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
+        LoadAdminIps();
         HookEvents();
         try
         {
@@ -81,7 +82,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.5 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.6 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -412,6 +413,219 @@ public class TKAntiCheat : Plugin
         }
     }
 
+    // ------------------------------------------------------------------
+    // Anti-usurpation de SteamID (v1.6). Nova-Life ne valide PAS les tickets
+    // Steam : le client déclare son SteamID librement. On ne peut pas réparer
+    // l'authentification, mais on rend le spoof inutilisable :
+    //  - deux joueurs en ligne avec le MÊME SteamID = usurpation certaine
+    //  - un compte admin qui se connecte depuis une IP jamais vue = suspect
+    // ------------------------------------------------------------------
+    private readonly Dictionary<ulong, double> spoofLastAlert = new Dictionary<ulong, double>();
+    private readonly Dictionary<ulong, double> ipLastAlert = new Dictionary<ulong, double>();
+    private readonly Dictionary<string, HashSet<string>> adminIps = new Dictionary<string, HashSet<string>>();
+
+    private string AdminIpsPath()
+    {
+        return Path.Combine(pluginDir, "adminips.txt");
+    }
+
+    private void LoadAdminIps()
+    {
+        try
+        {
+            adminIps.Clear();
+            if (!File.Exists(AdminIpsPath()))
+            {
+                return;
+            }
+            foreach (string raw in File.ReadAllLines(AdminIpsPath()))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("#"))
+                {
+                    continue;
+                }
+                string[] parts = line.Split(';');
+                if (parts.Length < 2)
+                {
+                    continue;
+                }
+                HashSet<string> ips = new HashSet<string>();
+                foreach (string ip in parts[1].Split(','))
+                {
+                    string t = ip.Trim();
+                    if (t.Length > 0)
+                    {
+                        ips.Add(t);
+                    }
+                }
+                adminIps[parts[0].Trim()] = ips;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKAC] Erreur lecture adminips.txt : " + ex.Message);
+        }
+    }
+
+    private void SaveAdminIps()
+    {
+        try
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("# IP connues par compte admin — steamId;ip1,ip2 (une ligne par compte)");
+            sb.AppendLine("# Ajoutez ici la nouvelle IP d'un admin si sa connexion est signalée SPOOF.");
+            foreach (KeyValuePair<string, HashSet<string>> kv in adminIps)
+            {
+                sb.AppendLine(kv.Key + ";" + string.Join(",", new List<string>(kv.Value).ToArray()));
+            }
+            File.WriteAllText(AdminIpsPath(), sb.ToString());
+        }
+        catch
+        {
+        }
+    }
+
+    private string GetIp(Player p)
+    {
+        try
+        {
+            NetworkConnectionToClient toClient = p.conn as NetworkConnectionToClient;
+            string a = toClient != null ? toClient.address : null;
+            if (string.IsNullOrEmpty(a))
+            {
+                return null;
+            }
+            if (a.StartsWith("::ffff:"))
+            {
+                a = a.Substring(7);
+            }
+            int colon = a.LastIndexOf(':');
+            if (colon > 0 && a.IndexOf('.') > 0 && colon > a.IndexOf('.'))
+            {
+                a = a.Substring(0, colon);
+            }
+            return a;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Appelé par le ticker sur le thread principal
+    public void CheckSpoof(float now)
+    {
+        if (Nova.server == null || (!config.spoofCheck && !config.adminIpGuard))
+        {
+            return;
+        }
+        List<Player> players;
+        try { players = Nova.server.GetAllPlayers(); } catch { return; }
+
+        if (config.spoofCheck)
+        {
+            Dictionary<ulong, List<Player>> byId = new Dictionary<ulong, List<Player>>();
+            foreach (Player p in players)
+            {
+                if (p == null || p.steamId == 0)
+                {
+                    continue;
+                }
+                List<Player> l;
+                if (!byId.TryGetValue(p.steamId, out l))
+                {
+                    l = new List<Player>();
+                    byId[p.steamId] = l;
+                }
+                l.Add(p);
+            }
+            foreach (KeyValuePair<ulong, List<Player>> kv in byId)
+            {
+                if (kv.Value.Count < 2)
+                {
+                    continue;
+                }
+                double last;
+                spoofLastAlert.TryGetValue(kv.Key, out last);
+                if (now - last >= 15)
+                {
+                    spoofLastAlert[kv.Key] = now;
+                    Alert("SPOOF", SafePseudo(kv.Value[0]), kv.Key,
+                        kv.Value.Count + " connexions simultanées avec le même SteamID (usurpation)"
+                        + (config.spoofKick ? " — kick" : ""));
+                }
+                if (config.spoofKick)
+                {
+                    foreach (Player d in kv.Value)
+                    {
+                        try { d.Disconnect("Sécurité : ce SteamID est déjà en ligne (usurpation détectée)"); } catch { }
+                    }
+                }
+            }
+        }
+
+        if (config.adminIpGuard)
+        {
+            bool dirty = false;
+            foreach (Player p in players)
+            {
+                if (p == null || p.steamId == 0)
+                {
+                    continue;
+                }
+                string sid = p.steamId.ToString();
+                bool guard = adminWhitelist.Contains(sid);
+                if (!guard)
+                {
+                    try { guard = p.account != null && p.account.adminLevel > 0; } catch { }
+                }
+                if (!guard)
+                {
+                    continue;
+                }
+                string ip = GetIp(p);
+                if (string.IsNullOrEmpty(ip))
+                {
+                    continue;
+                }
+                HashSet<string> known;
+                if (!adminIps.TryGetValue(sid, out known))
+                {
+                    known = new HashSet<string>();
+                    adminIps[sid] = known;
+                }
+                if (known.Count == 0)
+                {
+                    known.Add(ip); // première IP vue = référence (apprentissage)
+                    dirty = true;
+                    continue;
+                }
+                if (known.Contains(ip))
+                {
+                    continue;
+                }
+                double last;
+                ipLastAlert.TryGetValue(p.steamId, out last);
+                if (now - last >= 30)
+                {
+                    ipLastAlert[p.steamId] = now;
+                    Alert("SPOOF", SafePseudo(p), p.steamId,
+                        "compte admin connecté depuis une IP inconnue (" + ip + ")"
+                        + (config.adminIpKick ? " — kick" : " — si légitime, ajoutez l'IP dans TKAntiCheat/adminips.txt"));
+                }
+                if (config.adminIpKick)
+                {
+                    try { p.Disconnect("Sécurité : IP non reconnue pour ce compte admin"); } catch { }
+                }
+            }
+            if (dirty)
+            {
+                SaveAdminIps();
+            }
+        }
+    }
+
     // Appelé par le ticker sur le thread principal
     public void CheckSpeeds(float now)
     {
@@ -596,6 +810,7 @@ public class TKAntiCheatTicker : MonoBehaviour
         {
             plugin.CheckSpeeds(now);
             plugin.CheckAdmins(now);
+            plugin.CheckSpoof(now);
         }
         catch (Exception ex)
         {
@@ -634,6 +849,13 @@ public class TKAntiCheatConfig
     public bool adminAutoReset = false;
     // Kick automatique du joueur détecté avec un niveau admin non autorisé
     public bool adminKick = false;
+    // Anti-usurpation : deux connexions simultanées avec le même SteamID = spoof
+    public bool spoofCheck = true;
+    public bool spoofKick = true;
+    // Garde IP : alerte si un compte admin se connecte depuis une IP jamais vue
+    // (apprentissage : la première IP vue devient la référence ; adminips.txt)
+    public bool adminIpGuard = false;
+    public bool adminIpKick = false;
     // Anti-spam de commandes/chat en jeu
     public bool spamEnabled = true;
     public int spamThreshold = 12;      // actions max sur la fenetre avant sanction
@@ -664,6 +886,10 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"adminWhitelist\": \"" + (c.adminWhitelist ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",");
         sb.AppendLine("  \"adminAutoReset\": " + (c.adminAutoReset ? "true" : "false") + ",");
         sb.AppendLine("  \"adminKick\": " + (c.adminKick ? "true" : "false") + ",");
+        sb.AppendLine("  \"spoofCheck\": " + (c.spoofCheck ? "true" : "false") + ",");
+        sb.AppendLine("  \"spoofKick\": " + (c.spoofKick ? "true" : "false") + ",");
+        sb.AppendLine("  \"adminIpGuard\": " + (c.adminIpGuard ? "true" : "false") + ",");
+        sb.AppendLine("  \"adminIpKick\": " + (c.adminIpKick ? "true" : "false") + ",");
         sb.AppendLine("  \"spamEnabled\": " + (c.spamEnabled ? "true" : "false") + ",");
         sb.AppendLine("  \"spamThreshold\": " + c.spamThreshold + ",");
         sb.AppendLine("  \"spamWindowSeconds\": " + c.spamWindowSeconds + ",");
@@ -703,6 +929,10 @@ public class TKAntiCheatConfig
         if (aw.Success) c.adminWhitelist = aw.Groups["v"].Value.Replace("\\\"", "\"").Replace("\\\\", "\\");
         c.adminAutoReset = GetBool(json, "adminAutoReset", c.adminAutoReset);
         c.adminKick = GetBool(json, "adminKick", c.adminKick);
+        c.spoofCheck = GetBool(json, "spoofCheck", c.spoofCheck);
+        c.spoofKick = GetBool(json, "spoofKick", c.spoofKick);
+        c.adminIpGuard = GetBool(json, "adminIpGuard", c.adminIpGuard);
+        c.adminIpKick = GetBool(json, "adminIpKick", c.adminIpKick);
         c.spamEnabled = GetBool(json, "spamEnabled", c.spamEnabled);
         c.spamThreshold = (int)GetDouble(json, "spamThreshold", c.spamThreshold);
         c.spamWindowSeconds = (int)GetDouble(json, "spamWindowSeconds", c.spamWindowSeconds);

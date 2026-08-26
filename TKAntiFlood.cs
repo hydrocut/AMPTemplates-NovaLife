@@ -9,7 +9,7 @@ using Mirror;
 using UnityEngine;
 
 /// <summary>
-/// TKAntiFlood v1.1 — TeamKit.fr
+/// TKAntiFlood v1.2 — TeamKit.fr
 ///
 /// Protège le serveur contre les floods de connexions TCP (attaques type
 /// "possible header attack with a header of: 0 bytes" en rafale depuis une
@@ -62,7 +62,7 @@ public class TKAntiFlood : Plugin
         LoadConfig();
         LoadBans();
         HookTransport();
-        Debug.Log("[TKFLOOD] Plugin TKAntiFlood v1.1 initialisé (seuil "
+        Debug.Log("[TKFLOOD] Plugin TKAntiFlood v1.2 initialisé (seuil "
             + config.maxAttempts + " connexions / " + config.windowSeconds + "s, ban "
             + (config.banMinutes <= 0 ? "permanent" : config.banMinutes + " min") + ")");
     }
@@ -361,6 +361,7 @@ public class TKAntiFlood : Plugin
     // ------------------------------------------------------------------
     private string configPathSaved;
     private string lastConfigJson;
+    private string lastBansText;
     private int lastReloadTick;
 
     // Vérifie (au plus toutes les 20 s) si config.json a changé (panel web) — à chaud.
@@ -378,6 +379,7 @@ public class TKAntiFlood : Plugin
             {
                 return;
             }
+            ReloadBansIfChanged();
             string txt = File.ReadAllText(configPathSaved);
             if (txt == lastConfigJson)
             {
@@ -406,6 +408,35 @@ public class TKAntiFlood : Plugin
         catch (Exception ex)
         {
             Debug.LogError("[TKFLOOD] Erreur rechargement config : " + ex.Message);
+        }
+    }
+
+    // Recharge banned.txt s'il a changé (ban IP ajouté depuis le panel)
+    private void ReloadBansIfChanged()
+    {
+        try
+        {
+            if (bannedFilePath == null || !File.Exists(bannedFilePath))
+            {
+                return;
+            }
+            string txt = File.ReadAllText(bannedFilePath);
+            if (txt == lastBansText)
+            {
+                return;
+            }
+            bool first = lastBansText == null;
+            lastBansText = txt;
+            if (first)
+            {
+                return; // premier passage : les bans sont déjà chargés au boot
+            }
+            banned.Clear();
+            LoadBans();
+            Debug.Log("[TKFLOOD] banned.txt rechargé (" + banned.Count + " IP)");
+        }
+        catch
+        {
         }
     }
 

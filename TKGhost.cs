@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKGhost v1.1 — TeamKit.fr
+/// TKGhost v1.2 — TeamKit.fr
 ///
 /// Optimisation FPS client : transforme automatiquement en « fantômes »
 /// les véhicules abandonnés dans le monde.
@@ -50,7 +50,7 @@ public class TKGhost : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKGHOST] Plugin TKGhost v1.1 désactivé par config (réactivable depuis le panel)");
+            Debug.Log("[TKGHOST] Plugin TKGhost v1.2 désactivé par config (réactivable depuis le panel)");
         }
         try
         {
@@ -59,7 +59,7 @@ public class TKGhost : Plugin
             TKGhostTicker ticker = go.AddComponent<TKGhostTicker>();
             ticker.config = config;
             ticker.plugin = this;
-            Debug.Log("[TKGHOST] Plugin TKGhost v1.1 initialisé (fantôme après "
+            Debug.Log("[TKGHOST] Plugin TKGhost v1.2 initialisé (fantôme après "
                 + config.ghostAfterMinutes + " min d'immobilité, rayon joueurs "
                 + config.playerRadiusMeters + " m)");
         }
@@ -223,6 +223,24 @@ public class TKGhostTicker : MonoBehaviour
 
             Vector3 pos;
             try { pos = lv.instance.transform.position; } catch { continue; }
+
+            // Véhicule corrompu (position NaN/infinie) : spam console + physique
+            // cassée. On le range au garage automatiquement, il redevient sain.
+            if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)
+                || float.IsInfinity(pos.x) || float.IsInfinity(pos.y) || float.IsInfinity(pos.z)
+                || Mathf.Abs(pos.x) > 100000f || Mathf.Abs(pos.y) > 100000f || Mathf.Abs(pos.z) > 100000f)
+            {
+                try
+                {
+                    Nova.v.StowVehicle(lv.vehicleId);
+                    Debug.Log("[TKGHOST] Véhicule #" + lv.vehicleId + " à position invalide (NaN) — rangé au garage automatiquement");
+                }
+                catch
+                {
+                }
+                tracks.Remove(lv.vehicleId);
+                continue;
+            }
 
             Track t;
             if (!tracks.TryGetValue(lv.vehicleId, out t))
