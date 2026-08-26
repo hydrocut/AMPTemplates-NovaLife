@@ -329,7 +329,7 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.0.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -499,6 +499,11 @@ public class TKWebPanel : Plugin
             else if (path.StartsWith("/img/"))
             {
                 ServeSerigraphie(ctx, path);
+                return;
+            }
+            else if (path == "/mapimg")
+            {
+                ServeMapImage(ctx);
                 return;
             }
             else if (path.StartsWith("/api/"))
@@ -829,6 +834,14 @@ public class TKWebPanel : Plugin
                 return ApiPlugSet(body);
             case "/api/acwl":
                 return ApiAcWl(body);
+            case "/api/mapcalib":
+                if (ctx.Request.HttpMethod == "POST")
+                {
+                    return ApiMapCalibSet(body);
+                }
+                return ApiMapCalibGet();
+            case "/api/mapvehicles":
+                return ApiMapVehicles();
             case "/api/banip":
                 return ApiBanIp(body);
             case "/api/identity":
@@ -4466,6 +4479,147 @@ public class TKWebPanel : Plugin
             sb2.Append("]}");
             return sb2.ToString();
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Live map (v3.1) : image de la carte du jeu (map.jpg, extraite des
+    // assets, 3500x3500) servie par /mapimg ; calibrage monde->pixels
+    // persisté PAR INSTANCE dans Plugins/TKWebPanel/mapcalib.json
+    // (chaque serveur peut avoir sa propre carte). Le POST est réservé
+    // au propriétaire (calibrage en 2 points depuis le panel).
+    // ------------------------------------------------------------------
+    private void ServeMapImage(HttpListenerContext ctx)
+    {
+        try
+        {
+            string file = Path.Combine(pluginDir, "map.jpg");
+            if (!File.Exists(file))
+            {
+                ctx.Response.StatusCode = 404;
+                ctx.Response.OutputStream.Close();
+                return;
+            }
+            byte[] data = File.ReadAllBytes(file);
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = "image/jpeg";
+            ctx.Response.Headers["Cache-Control"] = "public, max-age=604800";
+            ctx.Response.ContentLength64 = data.Length;
+            ctx.Response.OutputStream.Write(data, 0, data.Length);
+            ctx.Response.OutputStream.Close();
+        }
+        catch
+        {
+            try { ctx.Response.StatusCode = 500; ctx.Response.OutputStream.Close(); } catch { }
+        }
+    }
+
+    private string MapCalibPath() { return Path.Combine(pluginDir, "mapcalib.json"); }
+
+    private string ApiMapCalibGet()
+    {
+        try
+        {
+            if (File.Exists(MapCalibPath()))
+            {
+                string t = File.ReadAllText(MapCalibPath()).Trim();
+                if (t.StartsWith("{"))
+                {
+                    return t;
+                }
+            }
+        }
+        catch
+        {
+        }
+        // estimation par défaut (carte Amboise, calage automatique par corrélation)
+        return "{\"sx\":0.45,\"sy\":-0.45,\"ox\":1626,\"oy\":1357,\"defaut\":true}";
+    }
+
+    private string ApiMapCalibSet(string body)
+    {
+        double sx = Json.GetDouble(body, "sx", 0);
+        double sy = Json.GetDouble(body, "sy", 0);
+        double ox2 = Json.GetDouble(body, "ox", 0);
+        double oy2 = Json.GetDouble(body, "oy", 0);
+        if (sx == 0 || sy == 0 || Math.Abs(sx) > 50 || Math.Abs(sy) > 50)
+        {
+            return "{\"error\":\"calibrage invalide\"}";
+        }
+        try
+        {
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            File.WriteAllText(MapCalibPath(),
+                "{\"sx\":" + sx.ToString("0.######", ci) + ",\"sy\":" + sy.ToString("0.######", ci)
+                + ",\"ox\":" + ox2.ToString("0.##", ci) + ",\"oy\":" + oy2.ToString("0.##", ci) + "}");
+            StaffLog("calibre la carte (sx=" + sx.ToString("0.####", ci) + ")");
+            return "{\"ok\":true}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    private string ApiMapVehicles()
+    {
+        return (string)RunOnMain(delegate
+        {
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            HashSet<int> seen = new HashSet<int>();
+            if (Nova.v != null && Nova.v.vehicles != null)
+            {
+                foreach (LifeVehicle lv in Nova.v.vehicles)
+                {
+                    if (lv == null || lv.isStowed || !seen.Add(lv.vehicleId))
+                    {
+                        continue;
+                    }
+                    float x = 0, z = 0;
+                    bool ghost = false;
+                    try
+                    {
+                        if (lv.instance != null)
+                        {
+                            UnityEngine.Vector3 pos = lv.instance.transform.position;
+                            x = pos.x; z = pos.z;
+                        }
+                        else if (lv.fake != null)
+                        {
+                            UnityEngine.Vector3 pos = lv.fake.transform.position;
+                            x = pos.x; z = pos.z;
+                            ghost = true;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                    if (float.IsNaN(x) || float.IsNaN(z))
+                    {
+                        continue;
+                    }
+                    int ownerId = 0;
+                    try { ownerId = lv.permissions != null && lv.permissions.owner != null ? lv.permissions.owner.characterId : 0; } catch { }
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append("{\"id\":").Append(lv.vehicleId);
+                    sb.Append(",\"name\":").Append(Json.Str(VehicleModelName(lv.modelId)));
+                    sb.Append(",\"plate\":").Append(Json.Str(lv.plate ?? ""));
+                    sb.Append(",\"x\":").Append(x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(",\"z\":").Append(z.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(",\"ghost\":").Append(ghost ? "true" : "false");
+                    sb.Append(",\"ownerId\":").Append(ownerId);
+                    sb.Append("}");
+                }
+            }
+            sb.Append("]");
+            return sb.ToString();
+        });
     }
 
     private string ApiAntiCheat()

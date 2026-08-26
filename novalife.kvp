@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=63
-Meta.ReleaseNotes=Panel v3.0.1 : nom du serveur sur 2 lignes dans la sidebar (plus de troncature) + pastilles de notification sur la navigation (Securite = alertes anti-cheat non lues, Admins = comptes non whitelist pour le proprio).
+Meta.ConfigVersion=64
+Meta.ReleaseNotes=Panel v3.1 : carte en direct - carte du jeu extraite des assets, joueurs (5 s) et vehicules (8 s) en temps reel, toutes les actions au clic (kick-ban-soigner..., ranger-supprimer vehicule), pan-zoom, calibrage en 2 points persiste par instance.
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]
