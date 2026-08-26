@@ -458,8 +458,8 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
     <div class="tblwrap">
     <table>
-      <thead><tr><th></th><th>Compte</th><th>SteamID</th><th>Niveau</th><th>Actions</th></tr></thead>
-      <tbody id="admins"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody>
+      <thead><tr><th></th><th>Compte</th><th>SteamID</th><th>Niveau</th><th>Anti-cheat</th><th>Actions</th></tr></thead>
+      <tbody id="admins"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
   </section>
@@ -1083,18 +1083,27 @@ function loadAdmins(quiet){
   api('admins').then(function(list){
     if(list.error){ if(!quiet) toast(list.error, true); return; }
     var tb = document.getElementById('admins');
-    if(!list.length){ tb.innerHTML = '<tr><td colspan="5" class="muted">Aucun administrateur</td></tr>'; return; }
+    if(!list.length){ tb.innerHTML = '<tr><td colspan="6" class="muted">Aucun administrateur</td></tr>'; return; }
     tb.innerHTML = list.map(function(a){
+      var wl = a.whitelisted
+        ? '<span class="badge" style="color:var(--ok)">liste blanche</span> <button onclick="acWl(\'' + a.steamId + '\',0)">Retirer</button>'
+        : '<span class="badge" style="color:var(--warn,#e3b341)">non valid\u00e9</span> <button class="primary" onclick="acWl(\'' + a.steamId + '\',1)">Whitelister</button>';
       return '<tr><td><span class="dot ' + (a.online ? 'on' : 'off') + '"></span></td>' +
         '<td><b>' + esc(a.username || '?') + '</b></td>' +
         '<td class="mono">' + esc(a.steamId) + '</td>' +
         '<td><span class="badge admin">niveau ' + a.level + '</span></td>' +
+        '<td>' + wl + '</td>' +
         '<td class="actions">' +
           '<button onclick="admLevel(\'' + a.steamId + '\',' + a.level + ')">Changer niveau</button>' +
           '<button class="danger" onclick="if(confirm(\'Retirer les droits admin ?\'))admSet(\'' + a.steamId + '\',0,\'\')">Retirer</button>' +
         '</td></tr>';
     }).join('');
   }).catch(function(){});
+}
+function acWl(steamId, add){
+  api('acwl', {steamId: steamId, add: add}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast(add ? 'Ajout\u00e9 \u00e0 la liste blanche anti-cheat' : 'Retir\u00e9 de la liste blanche'); loadAdmins(true); }
+  });
 }
 function admAdd(){
   var id = document.getElementById('adm-steamid').value.trim();

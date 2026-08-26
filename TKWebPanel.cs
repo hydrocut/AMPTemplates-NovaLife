@@ -328,7 +328,7 @@ public class TKWebPanel : Plugin
             LoadPanelUsers();
             StartAutoBackup();
         StartSericache();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.12.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.13 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -697,6 +697,7 @@ public class TKWebPanel : Plugin
             case "/api/acset":
             case "/api/plugconfig":
             case "/api/plugset":
+            case "/api/acwl":
             case "/api/benchspawn":
             case "/api/benchghost":
             case "/api/benchreal":
@@ -823,6 +824,8 @@ public class TKWebPanel : Plugin
                 return ApiPlugConfig(ctx.Request.QueryString["name"]);
             case "/api/plugset":
                 return ApiPlugSet(body);
+            case "/api/acwl":
+                return ApiAcWl(body);
             case "/api/benchspawn":
                 return ApiBenchSpawn(body);
             case "/api/benchghost":
@@ -2906,6 +2909,7 @@ public class TKWebPanel : Plugin
 
     private string ApiAdmins()
     {
+        HashSet<string> wl = AcWhitelist();
         HashSet<string> online = new HashSet<string>();
         try
         {
@@ -2937,6 +2941,7 @@ public class TKWebPanel : Plugin
                 sb.Append(",\"username\":").Append(Json.Str(a.Username ?? ""));
                 sb.Append(",\"level\":").Append(a.AdminLevel);
                 sb.Append(",\"online\":").Append(online.Contains(a.SteamId ?? "") ? "true" : "false");
+                sb.Append(",\"whitelisted\":").Append(wl.Contains(a.SteamId ?? "") ? "true" : "false");
                 sb.Append("}");
             }
             sb.Append("]");
@@ -2949,6 +2954,50 @@ public class TKWebPanel : Plugin
     }
 
     // Garde l'anti-cheat en phase : un admin promu par le panel est légitime
+    // Whitelist anti-cheat actuelle (lue depuis TKAntiCheat/config.json)
+    private HashSet<string> AcWhitelist()
+    {
+        HashSet<string> ids = new HashSet<string>();
+        try
+        {
+            string cfg = AcConfigPath();
+            if (File.Exists(cfg))
+            {
+                Match m = Regex.Match(File.ReadAllText(cfg), "\"adminWhitelist\"\\s*:\\s*\"(?<v>(?:\\\\.|[^\"])*)\"");
+                if (m.Success)
+                {
+                    foreach (string x in m.Groups["v"].Value.Split(','))
+                    {
+                        string t = x.Trim();
+                        if (t.Length > 0)
+                        {
+                            ids.Add(t);
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+        return ids;
+    }
+
+    // Ajout/retrait manuel en liste blanche depuis la gestion des admins (owner)
+    private string ApiAcWl(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "").Trim();
+        bool add = Json.GetInt(body, "add", 1) == 1;
+        if (!Regex.IsMatch(steamId, "^[0-9]{17}$"))
+        {
+            return "{\"error\":\"SteamID64 invalide\"}";
+        }
+        SyncAntiCheatWhitelist(steamId, add);
+        StaffLog((add ? "ajoute " : "retire ") + steamId + (add ? " a" : " de") + " la liste blanche anti-cheat");
+        Debug.Log("[TKWEB] ACWL " + (add ? "+" : "-") + steamId);
+        return "{\"ok\":true}";
+    }
+
     private static void SyncAntiCheatWhitelist(string steamId, bool add)
     {
         try
