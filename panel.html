@@ -516,7 +516,7 @@ function refresh(){
   api('accheck').then(function(list){
     var tb = document.getElementById('accheck');
     if(!list.length){ tb.innerHTML = '<tr><td colspan="6" class="muted">Aucune détection</td></tr>'; return; }
-    var color = {ARGENT:'var(--warn)', TELEPORT:'var(--bad)', VITESSE:'var(--bad)', ITEMS:'var(--warn)', SPAM:'#c586ff'};
+    var color = {ARGENT:'var(--warn)', TELEPORT:'var(--bad)', VITESSE:'var(--bad)', ITEMS:'var(--warn)', SPAM:'#c586ff', ADMIN:'#ff3b3b'};
     tb.innerHTML = list.slice(0,60).map(function(a){
       return '<tr>' +
         '<td class="mono muted">' + esc(a.time) + '</td>' +

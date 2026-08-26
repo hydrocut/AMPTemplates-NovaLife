@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.2 — TeamKit.fr
+/// TKAntiCheat v1.3 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -49,6 +49,8 @@ public class TKAntiCheat : Plugin
     }
 
     private readonly Dictionary<ulong, Track> tracks = new Dictionary<ulong, Track>();
+    private HashSet<string> adminWhitelist = new HashSet<string>();
+    private readonly Dictionary<ulong, double> adminLastAlert = new Dictionary<ulong, double>();
     // Historique récent (pour le panel + throttle des logs identiques)
     private readonly List<string> alerts = new List<string>();
 
@@ -62,9 +64,10 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.2 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.3 désactivé par config");
             return;
         }
+        BuildAdminWhitelist();
         HookEvents();
         try
         {
@@ -78,7 +81,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.2 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.3 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -245,6 +248,77 @@ public class TKAntiCheat : Plugin
             Alert("ITEMS", SafePseudo(p), p.steamId, ((int)w[1]) + "x item " + itemId + " en moins d'une minute");
             w[0] = now;
             w[1] = 0;
+        }
+    }
+
+    private void BuildAdminWhitelist()
+    {
+        adminWhitelist = new HashSet<string>();
+        if (config == null || string.IsNullOrEmpty(config.adminWhitelist))
+        {
+            return;
+        }
+        foreach (string raw in config.adminWhitelist.Split(','))
+        {
+            string id = raw.Trim();
+            if (id.Length > 0)
+            {
+                adminWhitelist.Add(id);
+            }
+        }
+    }
+
+    // Détection d'auto-attribution d'admin (mod menu « self-admin »).
+    // Appelée par le ticker sur le thread principal.
+    public void CheckAdmins(float now)
+    {
+        if (!config.adminProtection || Nova.server == null)
+        {
+            return;
+        }
+        foreach (Player p in Nova.server.GetAllPlayers())
+        {
+            if (p == null || p.account == null)
+            {
+                continue;
+            }
+            int level;
+            try { level = p.account.adminLevel; } catch { continue; }
+            if (level <= 0)
+            {
+                continue;
+            }
+            string steamId = p.steamId.ToString();
+            if (adminWhitelist.Contains(steamId))
+            {
+                continue; // admin légitime déclaré
+            }
+
+            // admin non autorisé : alerte throttlée
+            double last;
+            adminLastAlert.TryGetValue(p.steamId, out last);
+            if (now - last >= 15)
+            {
+                adminLastAlert[p.steamId] = now;
+                Alert("ADMIN", SafePseudo(p), p.steamId,
+                    "possède le niveau admin " + level + " sans être en liste blanche"
+                    + (config.adminAutoReset ? " — droits retirés" : ""));
+            }
+
+            if (config.adminAutoReset)
+            {
+                try
+                {
+                    p.account.adminLevel = 0;
+                    p.account.adminPin = "";
+                    Life.DB.LifeDB.SaveAccount(p.account);
+                    try { p.Notify("Sécurité", "Vos droits admin non autorisés ont été retirés."); } catch { }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[TKAC] Erreur retrait admin : " + ex.Message);
+                }
+            }
         }
     }
 
@@ -421,6 +495,7 @@ public class TKAntiCheatTicker : MonoBehaviour
         try
         {
             plugin.CheckSpeeds(now);
+            plugin.CheckAdmins(now);
         }
         catch (Exception ex)
         {
@@ -449,6 +524,14 @@ public class TKAntiCheatConfig
     public int checkIntervalSeconds = 1;
     // Nb d'alertes gardées en mémoire/fichier
     public int maxAlerts = 200;
+    // Protection contre l'auto-attribution d'admin (mod menu « self-admin »)
+    public bool adminProtection = true;
+    // SteamID des admins LEGITIMES (séparés par des virgules) — les seuls
+    // autorisés à avoir un niveau admin. Vide = toute présence d'admin alerte.
+    public string adminWhitelist = "";
+    // Retirer automatiquement les droits d'un admin non listé (déconseillé
+    // tant que la liste blanche n'est pas complète : mets d'abord tes staff)
+    public bool adminAutoReset = false;
     // Anti-spam de commandes/chat en jeu
     public bool spamEnabled = true;
     public int spamThreshold = 12;      // actions max sur la fenetre avant sanction
@@ -475,6 +558,9 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"itemWindowTotal\": " + c.itemWindowTotal + ",");
         sb.AppendLine("  \"checkIntervalSeconds\": " + c.checkIntervalSeconds + ",");
         sb.AppendLine("  \"maxAlerts\": " + c.maxAlerts + ",");
+        sb.AppendLine("  \"adminProtection\": " + (c.adminProtection ? "true" : "false") + ",");
+        sb.AppendLine("  \"adminWhitelist\": \"" + (c.adminWhitelist ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",");
+        sb.AppendLine("  \"adminAutoReset\": " + (c.adminAutoReset ? "true" : "false") + ",");
         sb.AppendLine("  \"spamEnabled\": " + (c.spamEnabled ? "true" : "false") + ",");
         sb.AppendLine("  \"spamThreshold\": " + c.spamThreshold + ",");
         sb.AppendLine("  \"spamWindowSeconds\": " + c.spamWindowSeconds + ",");
@@ -509,6 +595,10 @@ public class TKAntiCheatConfig
         c.itemWindowTotal = (int)GetDouble(json, "itemWindowTotal", c.itemWindowTotal);
         c.checkIntervalSeconds = (int)GetDouble(json, "checkIntervalSeconds", c.checkIntervalSeconds);
         c.maxAlerts = (int)GetDouble(json, "maxAlerts", c.maxAlerts);
+        c.adminProtection = GetBool(json, "adminProtection", c.adminProtection);
+        Match aw = Regex.Match(json, @"""adminWhitelist""\s*:\s*""(?<v>(?:\\.|[^""])*)""");
+        if (aw.Success) c.adminWhitelist = aw.Groups["v"].Value.Replace("\\\"", "\"").Replace("\\\\", "\\");
+        c.adminAutoReset = GetBool(json, "adminAutoReset", c.adminAutoReset);
         c.spamEnabled = GetBool(json, "spamEnabled", c.spamEnabled);
         c.spamThreshold = (int)GetDouble(json, "spamThreshold", c.spamThreshold);
         c.spamWindowSeconds = (int)GetDouble(json, "spamWindowSeconds", c.spamWindowSeconds);
