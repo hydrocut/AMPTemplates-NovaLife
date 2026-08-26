@@ -118,7 +118,7 @@ input:focus{outline:none;border-color:var(--accent)}
 .pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
 .plugitem{display:flex;justify-content:space-between;gap:8px;background:#0f1420;border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
 .plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.cfgbox{background:#0f1420;border:1px solid var(--border);border-radius:8px;padding:2px 12px;margin-top:8px}.cfgrow{display:flex;align-items:center;gap:12px;padding:9px 0}.cfgrow + .cfgrow{border-top:1px solid #1c2436}.cfgrow label{flex:1;font-size:12px;color:var(--text);line-height:1.35}.cfgrow input{width:84px;text-align:right;background:#151b2b;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;flex:none}.cfgrow button{padding:5px 12px;font-size:12px;flex:none}.cfgrow .switch{padding:0;flex:none}.cfgrow.col{flex-direction:column;align-items:stretch;gap:6px}.cfgrow.col .cfgline{display:flex;gap:8px}.cfgrow.col input{flex:1;width:auto;text-align:left}.modal .box .cfgrow button{display:inline-block;width:auto;margin:0;padding:6px 14px;text-align:center;flex:none}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.slink{color:var(--accent);text-decoration:none;border-bottom:1px dotted rgba(88,166,255,.5);cursor:pointer}.slink:hover{border-bottom-style:solid}.morebtn{width:100%;text-align:center;padding:9px;font-size:12px}.cfgbox{background:#0f1420;border:1px solid var(--border);border-radius:8px;padding:2px 12px;margin-top:8px}.cfgrow{display:flex;align-items:center;gap:12px;padding:9px 0}.cfgrow + .cfgrow{border-top:1px solid #1c2436}.cfgrow label{flex:1;font-size:12px;color:var(--text);line-height:1.35}.cfgrow input{width:84px;text-align:right;background:#151b2b;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;flex:none}.cfgrow button{padding:5px 12px;font-size:12px;flex:none}.cfgrow .switch{padding:0;flex:none}.cfgrow.col{flex-direction:column;align-items:stretch;gap:6px}.cfgrow.col .cfgline{display:flex;gap:8px}.cfgrow.col input{flex:1;width:auto;text-align:left}.modal .box .cfgrow button{display:inline-block;width:auto;margin:0;padding:6px 14px;text-align:center;flex:none}
 .gl{width:64px;text-align:right;font-size:12px}
 button.chip{display:inline-flex;align-items:center;gap:6px;min-width:200px;justify-content:flex-start;padding:6px 12px}
 button.chip img{width:26px;height:26px;object-fit:contain}
@@ -536,6 +536,46 @@ var playersCache = [];
 
 var refreshTick = 0;
 
+// --- Navigation croisée : tout SteamID devient cliquable ---
+function nameOf(steamId){
+  var a = historyCache.filter(function(x){ return x.steamId === steamId; })[0];
+  return a && a.username ? a.username : steamId;
+}
+function slinkSteam(steamId, label){
+  return '<a href="#" class="slink" onclick="steamMenu(\'' + steamId + '\');return false">' + esc(label || nameOf(steamId)) + '</a>';
+}
+function linkSteam(html){
+  return html.replace(/7656119\d{10}/g, function(id){
+    var n = nameOf(id);
+    return '<a href="#" class="slink" onclick="steamMenu(\'' + id + '\');return false">'
+      + esc(n) + (n !== id ? ' <span class="muted mono" style="font-size:10px">(' + id.slice(-5) + ')</span>' : '') + '</a>';
+  });
+}
+function steamMenu(steamId){
+  var a = historyCache.filter(function(x){ return x.steamId === steamId; })[0];
+  var who = a && a.username ? a.username : 'Joueur';
+  var b = '';
+  if(a && a.characterId > 0){
+    b += '<button onclick="closeModal();playerCard(' + a.characterId + ',\'' + esc(a.username||'') + '\')">\uD83D\uDCC7 Fiche compl\u00e8te</button>';
+    b += '<button onclick="closeModal();offInv(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Inventaire</button>';
+    b += '<button onclick="closeModal();offGarage(' + a.characterId + ',\'' + esc(a.username||'') + '\',\'' + steamId + '\')">Garage</button>';
+  }
+  b += '<button onclick="closeModal();openIdentity(\'' + steamId + '\',\'' + esc(a ? (a.username||'') : '') + '\')">\uD83D\uDD0E Identit\u00e9s & IP</button>';
+  b += '<button onclick="closeModal();giveToPlayer(\'' + steamId + '\')">\uD83C\uDF81 Donner un objet</button>';
+  if(a && a.banned) b += '<button onclick="closeModal();histUnban(\'' + steamId + '\')">D\u00e9bannir</button>';
+  else b += '<button class="danger" onclick="closeModal();histBan(\'' + steamId + '\')">Ban</button>';
+  openModal('<h3>' + esc(who) + ' <span class="muted mono" style="font-size:12px;font-weight:400">' + steamId + '</span></h3>' + b);
+}
+function giveToPlayer(steamId){
+  showTab('joueurs');
+  var sel = document.getElementById('give-player');
+  var found = false;
+  for(var i = 0; i < sel.options.length; i++){ if(sel.options[i].value === steamId){ found = true; break; } }
+  if(!found){ toast('Le joueur doit \u00eatre en ligne pour recevoir un objet (nourriture, eau\u2026)', true); return; }
+  sel.value = steamId;
+  try { sel.scrollIntoView({behavior:'smooth', block:'center'}); } catch(e) {}
+  openItemPicker();
+}
 function fmtDate(u){ return u>0 ? new Date(u*1000).toLocaleString('fr-FR') : '—'; }
 function openIdentity(steamId, pseudo){
   api('identity?steamId=' + encodeURIComponent(steamId)).then(function(r){
@@ -585,6 +625,7 @@ function playerActions(id){
   b += '<button onclick="closeModal();prisonPlayer(\'' + id + '\')">⚖ Prison / libérer</button>';
   b += '<button onclick="closeModal();permisPlayer(\'' + id + '\')">🚦 Points de permis</button>';
   b += '<button onclick="closeModal();garageBySteam(\'' + id + '\',\'' + esc(who) + '\')">🚗 Garage</button>';
+  b += '<button onclick="closeModal();giveToPlayer(\'' + id + '\')">\uD83C\uDF81 Donner un objet (nourriture, eau\u2026)</button>';
   b += '<button onclick="closeModal();localMsgPlayer(\'' + id + '\')">📍 Message local</button>';
   b += '<button class="danger" onclick="closeModal();kickPlayer(\'' + id + '\')">Kick</button>';
   b += '<button class="danger" onclick="closeModal();if(confirm(\'Bannir l’IP de ce joueur ? Il sera déconnecté et son IP bloquée définitivement au niveau réseau.\'))banIp(\'' + id + '\')">Ban IP</button>';
@@ -620,9 +661,9 @@ function renderPlayers(){
     var admin = p.adminLevel > 0 ? ' <span class="badge admin">admin ' + p.adminLevel + '</span>' : '';
     var pos = p.inGame ? p.x + ', ' + p.y + ', ' + p.z : '—';
     return '<tr>' +
-      '<td>' + esc(p.pseudo) + admin + '</td>' +
+      '<td><a href="#" class="slink" onclick="playerActions(\'' + p.steamId + '\');return false">' + esc(p.pseudo) + '</a>' + admin + '</td>' +
       '<td>' + perso + '</td>' +
-      '<td class="mono hide-mobile">' + p.steamId + '</td>' +
+      '<td class="mono hide-mobile">' + slinkSteam(String(p.steamId), String(p.steamId)) + '</td>' +
       '<td><span class="hp" style="background:' + hpColor(p.health) + '22;color:' + hpColor(p.health) + '">' + p.health + '</span></td>' +
       '<td>' + fmtMoney(p.money) + '</td>' +
       '<td>' + fmtMoney(p.bank) + '</td>' +
@@ -1390,6 +1431,15 @@ function renderHistory(){
       (a.steamId||'').indexOf(q) !== -1;
   });
   if(!list.length){ tb.innerHTML = '<tr><td colspan="10" class="muted">Aucun compte</td></tr>'; return; }
+  // Tri par defaut : en ligne d'abord, bannis en dernier, puis fortune decroissante
+  list = list.slice().sort(function(x, y){
+    var gx = x.online ? 0 : (x.banned ? 2 : 1);
+    var gy = y.online ? 0 : (y.banned ? 2 : 1);
+    if(gx !== gy) return gx - gy;
+    return ((y.money||0) + (y.bank||0)) - ((x.money||0) + (x.bank||0));
+  });
+  var hidden = 0;
+  if(!q && !histShowAll && list.length > 30){ hidden = list.length - 30; list = list.slice(0, 30); }
   tb.innerHTML = list.map(function(a){
     var statut = a.banned ? '<span class="badge" style="color:var(--bad)">BANNI</span>'
       : (a.online ? '<span class="badge" style="color:var(--ok)">EN LIGNE</span>' : '<span class="badge">hors ligne</span>');
@@ -1397,9 +1447,9 @@ function renderHistory(){
     var admin = a.adminLevel > 0 ? ' <span class="badge admin">admin ' + a.adminLevel + '</span>' : '';
     return '<tr>' +
       '<td><span class="dot ' + (a.online ? 'on' : 'off') + '"></span></td>' +
-      '<td>' + esc(a.username || '?') + admin + '</td>' +
-      '<td>' + perso + '</td>' +
-      '<td class="mono">' + esc(a.steamId) + '</td>' +
+      '<td>' + slinkSteam(a.steamId, a.username || '?') + admin + '</td>' +
+      '<td>' + (a.characterId > 0 && a.firstname ? '<a href="#" class="slink" onclick="playerCard(' + a.characterId + ',\'' + esc(a.username||'') + '\');return false">' + esc(a.firstname + ' ' + a.lastname) + '</a>' : perso) + '</td>' +
+      '<td class="mono"><a href="#" class="slink" onclick="openIdentity(\'' + a.steamId + '\',\'' + esc(a.username||'') + '\');return false">' + esc(a.steamId) + '</a></td>' +
       '<td>' + fmtMoney(a.money) + '</td>' +
       '<td>' + fmtMoney(a.bank) + '</td>' +
       '<td>' + a.kicks + '</td>' +
@@ -1417,7 +1467,11 @@ function renderHistory(){
         '</span>' +
       '</td></tr>';
   }).join('');
+  if(hidden > 0){
+    tb.innerHTML += '<tr><td colspan="10"><button class="morebtn" onclick="histShowAll=true;renderHistory()">Afficher les ' + hidden + ' autres comptes</button></td></tr>';
+  }
 }
+var histShowAll = false;
 function offInv(characterId, username){
   api('offlineinv?characterId=' + characterId).then(function(list){
     if(list.error){ toast(list.error, true); return; }
@@ -1535,14 +1589,21 @@ function renderBizs(){
   });
   if(bizsCache.length === 0){ tb.innerHTML = '<tr><td colspan="7" class="muted">Aucune entreprise</td></tr>'; return; }
   if(list.length === 0){ tb.innerHTML = '<tr><td colspan="7" class="muted">Aucune entreprise ne correspond au filtre</td></tr>'; return; }
+  list = list.slice().sort(function(x, y){ return (y.bank||0) - (x.bank||0); });
+  var hidden = 0;
+  if(!q && !bizShowAll && list.length > 30){ hidden = list.length - 30; list = list.slice(0, 30); }
   tb.innerHTML = list.map(function(b){
     return '<tr><td class="mono muted">' + b.id + '</td><td><b>' + esc(b.name) + '</b></td>' +
-      '<td>' + esc(b.ownerName || '#' + b.ownerId) + '</td>' +
+      '<td>' + (b.ownerName && b.ownerId > 0 ? '<a href="#" class="slink" onclick="playerCard(' + b.ownerId + ',\'' + esc(b.ownerName) + '\');return false">' + esc(b.ownerName) + '</a>' : esc(b.ownerName || '#' + b.ownerId)) + '</td>' +
       '<td>' + fmtMoney(b.bank) + '</td><td>' + fmtMoney(b.salaire) + '</td>' +
       '<td class="mono">#' + b.terrainId + '</td>' +
       '<td>' + (b.recruiting ? '<span class="badge" style="color:var(--ok)">recrute</span>' : '<span class="badge">fermé</span>') + '</td></tr>';
   }).join('');
+  if(hidden > 0){
+    tb.innerHTML += '<tr><td colspan="7"><button class="morebtn" onclick="bizShowAll=true;renderBizs()">Afficher les ' + hidden + ' autres entreprises</button></td></tr>';
+  }
 }
+var bizShowAll = false;
 
 
 // --- Reglages anti-cheat (owner) ---
