@@ -949,7 +949,7 @@ public class TKAntiCheatConfig
         if (aw.Success) c.adminWhitelist = aw.Groups["v"].Value.Replace("\\\"", "\"").Replace("\\\\", "\\");
         c.adminAutoReset = GetBool(json, "adminAutoReset", c.adminAutoReset);
         c.adminKick = GetBool(json, "adminKick", c.adminKick);
-        c.adminGraceSeconds = GetInt(json, "adminGraceSeconds", c.adminGraceSeconds);
+        c.adminGraceSeconds = (int)GetDouble(json, "adminGraceSeconds", c.adminGraceSeconds);
         c.spoofCheck = GetBool(json, "spoofCheck", c.spoofCheck);
         c.spoofKick = GetBool(json, "spoofKick", c.spoofKick);
         c.adminIpGuard = GetBool(json, "adminIpGuard", c.adminIpGuard);
