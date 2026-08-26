@@ -681,6 +681,8 @@ public class TKWebPanel : Plugin
             case "/api/panelusers":
             case "/api/paneluserset":
             case "/api/paneluserdel":
+            case "/api/backups":
+            case "/api/backupnow":
                 return 3;
             // modo autorisé (consultation + modération légère)
             case "/api/status":
@@ -854,6 +856,10 @@ public class TKWebPanel : Plugin
                 return ApiPanelUserDel(body);
             case "/api/ghoststats":
                 return (string)RunOnMain(ApiGhostStats);
+            case "/api/backups":
+                return ApiBackups();
+            case "/api/backupnow":
+                return ApiBackupNow();
             case "/api/floodbans":
                 return ApiFloodBans();
             case "/api/floodunban":
@@ -2495,6 +2501,89 @@ public class TKWebPanel : Plugin
             }
             return "{\"error\":\"le propriétaire (perso #" + ownerId + ") n'est pas en ligne\"}";
         });
+    }
+
+    // Dossier de sauvegardes de cette instance (déduit du serverPort)
+    private string BackupDir()
+    {
+        int port = 7787;
+        try
+        {
+            string cfg = Path.Combine(Path.GetDirectoryName(pluginDir), "../Config/server.json");
+            if (File.Exists(cfg))
+            {
+                port = Json.GetInt(File.ReadAllText(cfg), "serverPort", port);
+            }
+        }
+        catch
+        {
+        }
+        string name = port == 7787 ? "vizu" : (port == 7789 ? "marseille" : (port == 7788 ? "dev" : ("port" + port)));
+        return "/home/amp/backups/novalife/" + name;
+    }
+
+    private string ApiBackups()
+    {
+        StringBuilder sb = new StringBuilder("{\"dir\":");
+        string dir = BackupDir();
+        sb.Append(Json.Str(dir)).Append(",\"backups\":[");
+        try
+        {
+            if (Directory.Exists(dir))
+            {
+                List<string> files = new List<string>(Directory.GetFiles(dir, "life-*.db.gz"));
+                files.Sort();
+                files.Reverse();
+                bool first = true;
+                foreach (string f in files)
+                {
+                    if (!first) sb.Append(",");
+                    first = false;
+                    FileInfo fi = new FileInfo(f);
+                    sb.Append("{\"name\":").Append(Json.Str(fi.Name));
+                    sb.Append(",\"sizeKb\":").Append(fi.Length / 1024L);
+                    sb.Append(",\"date\":").Append(Json.Str(fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm")));
+                    sb.Append("}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+        sb.Append("]}");
+        return sb.ToString();
+    }
+
+    private string ApiBackupNow()
+    {
+        try
+        {
+            System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "sudo",
+                Arguments = "-n /home/amp/backups/tk_backup_trigger.sh",
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+            System.Diagnostics.Process proc = System.Diagnostics.Process.Start(psi);
+            if (!proc.WaitForExit(20000))
+            {
+                return "{\"error\":\"timeout de la sauvegarde\"}";
+            }
+            if (proc.ExitCode != 0)
+            {
+                return "{\"error\":\"échec (code " + proc.ExitCode + ")\"}";
+            }
+            StaffLog("sauvegarde manuelle de la base déclenchée");
+            Debug.Log("[TKWEB] BACKUP manuel déclenché");
+            return "{\"ok\":true}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str("sauvegarde indisponible : " + ex.Message) + "}";
+        }
     }
 
     private class HeavyAreaRow

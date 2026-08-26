@@ -266,6 +266,20 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
   </section>
 
+  <section data-tab="monde" class="need-owner">
+    <h2>Sauvegardes de la base <span class="muted" style="font-weight:400;font-size:12px">— à chaud, sans couper le serveur · auto toutes les 6 h, gardées 14 jours</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="primary" onclick="backupNow()">Sauvegarder maintenant</button>
+      <span id="backup-dir" class="muted"></span>
+    </div>
+    <div class="tblwrap">
+    <table>
+      <thead><tr><th>Fichier</th><th>Date</th><th>Taille</th></tr></thead>
+      <tbody id="backups"><tr><td colspan="3" class="muted">Chargement…</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+
   <section data-tab="monde">
     <h2>Optimisation FPS client (TKGhost)</h2>
     <div id="ghost-box" class="muted">Chargement…</div>
@@ -866,6 +880,7 @@ function showTab(name){
   });
   localStorage.setItem('tkweb_tab', name);
   if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3) loadPanelUsers(); }
+  if(name === 'monde' && myLevel() >= 3) loadBackups();
   if(name === 'chat') chatScrollBottom();
 }
 
@@ -1330,6 +1345,25 @@ function renderBizs(){
   }).join('');
 }
 
+
+// --- Sauvegardes (owner) ---
+function loadBackups(){
+  api('backups').then(function(r){
+    var tb = document.getElementById('backups');
+    if(r.error){ tb.innerHTML = '<tr><td colspan="3" class="muted">' + esc(r.error) + '</td></tr>'; return; }
+    document.getElementById('backup-dir').textContent = r.dir;
+    if(!r.backups.length){ tb.innerHTML = '<tr><td colspan="3" class="muted">Aucune sauvegarde encore</td></tr>'; return; }
+    tb.innerHTML = r.backups.map(function(b){
+      return '<tr><td class="mono">' + esc(b.name) + '</td><td>' + esc(b.date) + '</td><td>' + (b.sizeKb >= 1024 ? (b.sizeKb/1024).toFixed(1) + ' Mo' : b.sizeKb + ' Ko') + '</td></tr>';
+    }).join('');
+  }).catch(function(){});
+}
+function backupNow(){
+  toast('Sauvegarde en cours…');
+  api('backupnow', {}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Sauvegarde terminée'); loadBackups(); }
+  });
+}
 
 // --- Comptes panel (owner) ---
 function loadPanelUsers(){
