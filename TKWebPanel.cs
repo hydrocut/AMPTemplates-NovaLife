@@ -327,7 +327,8 @@ public class TKWebPanel : Plugin
             usersPath = Path.Combine(pluginDir, "users.json");
             LoadPanelUsers();
             StartAutoBackup();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v2.11.1 initialisé — panel sur le port " + port);
+        StartSericache();
+            Debug.Log("[TKWEB] Plugin TKWebPanel v2.12 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -492,6 +493,11 @@ public class TKWebPanel : Plugin
             else if (path.StartsWith("/vicon/"))
             {
                 ServeIcon(ctx, path, "vehicons");
+                return;
+            }
+            else if (path.StartsWith("/img/"))
+            {
+                ServeSerigraphie(ctx, path);
                 return;
             }
             else if (path.StartsWith("/api/"))
@@ -3936,6 +3942,237 @@ public class TKWebPanel : Plugin
             }
             return "{\"total\":" + ids.Count + ",\"real\":" + real + ",\"ghosts\":" + ghosts + ",\"missing\":" + missing + "}";
         });
+    }
+
+    // ------------------------------------------------------------------
+    // FastDL images (v2.12) : cache des sérigraphies. Le serveur télécharge
+    // chaque image une seule fois, la stocke dans Plugins/TKWebPanel/sericache/
+    // et réécrit l'URL du véhicule vers publicUrl/img/<sha1>.<ext> — les
+    // clients téléchargent alors depuis notre HTTPS rapide, et l'image
+    // survit à l'expiration du lien d'origine (liens Discord notamment).
+    // ------------------------------------------------------------------
+    private readonly HashSet<string> seriFailed = new HashSet<string>();
+
+    private string SeriBase()
+    {
+        string b = config.publicUrl;
+        if (!b.EndsWith("/"))
+        {
+            b += "/";
+        }
+        return b + "img/";
+    }
+
+    private void StartSericache()
+    {
+        if (string.IsNullOrEmpty(config.publicUrl))
+        {
+            return;
+        }
+        try { Directory.CreateDirectory(Path.Combine(pluginDir, "sericache")); } catch { }
+        Thread t = new Thread(delegate ()
+        {
+            Thread.Sleep(60 * 1000); // laisse le serveur finir de charger
+            while (true)
+            {
+                try
+                {
+                    SericachePass();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[TKWEB] Erreur cache sérigraphies : " + ex.Message);
+                }
+                Thread.Sleep(5 * 60 * 1000);
+            }
+        });
+        t.IsBackground = true;
+        t.Start();
+        Debug.Log("[TKWEB] FastDL images actif : sérigraphies mises en cache vers " + SeriBase());
+    }
+
+    private void SericachePass()
+    {
+        string baseUrl = SeriBase();
+        object listObj = RunOnMain(delegate
+        {
+            List<object[]> found = new List<object[]>();
+            if (Nova.v == null || Nova.v.vehicles == null)
+            {
+                return (object)found;
+            }
+            foreach (LifeVehicle lv in Nova.v.vehicles)
+            {
+                if (lv == null)
+                {
+                    continue;
+                }
+                string u = lv.serigraphie;
+                if (string.IsNullOrEmpty(u))
+                {
+                    continue;
+                }
+                if (!u.StartsWith("http://") && !u.StartsWith("https://"))
+                {
+                    continue;
+                }
+                if (u.StartsWith(baseUrl))
+                {
+                    continue; // déjà en cache
+                }
+                if (found.Count >= 10)
+                {
+                    break; // passe douce, la suite au prochain cycle
+                }
+                found.Add(new object[] { lv.vehicleId, u });
+            }
+            return (object)found;
+        });
+        List<object[]> jobs = (List<object[]>)listObj;
+        if (jobs == null || jobs.Count == 0)
+        {
+            return;
+        }
+        int done = 0;
+        foreach (object[] job in jobs)
+        {
+            int vid = (int)job[0];
+            string url = (string)job[1];
+            if (seriFailed.Contains(url))
+            {
+                continue;
+            }
+            string newUrl = SericacheFetch(url);
+            if (newUrl == null)
+            {
+                seriFailed.Add(url); // on ne réessaie pas avant le prochain boot
+                continue;
+            }
+            RunOnMain(delegate
+            {
+                LifeVehicle lv = Nova.v.GetVehicle(vid);
+                if (lv != null && lv.serigraphie == url)
+                {
+                    lv.serigraphie = newUrl;
+                    try
+                    {
+                        if (lv.instance != null)
+                        {
+                            lv.instance.Networkserigraphie = newUrl;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+                return (object)null;
+            });
+            done++;
+        }
+        if (done > 0)
+        {
+            Debug.Log("[TKWEB] SERICACHE " + done + " sérigraphie(s) mises en cache et réécrites");
+        }
+    }
+
+    // Télécharge l'image (5 Mo max, png/jpg seulement) et renvoie l'URL cache, sinon null.
+    private string SericacheFetch(string url)
+    {
+        try
+        {
+            string hash;
+            using (System.Security.Cryptography.SHA1 sha = System.Security.Cryptography.SHA1.Create())
+            {
+                hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(url))).Replace("-", "").ToLowerInvariant();
+            }
+            string dir = Path.Combine(pluginDir, "sericache");
+            string pngFile = Path.Combine(dir, hash + ".png");
+            string jpgFile = Path.Combine(dir, hash + ".jpg");
+            if (File.Exists(pngFile))
+            {
+                return SeriBase() + hash + ".png";
+            }
+            if (File.Exists(jpgFile))
+            {
+                return SeriBase() + hash + ".jpg";
+            }
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+            req.Timeout = 15000;
+            req.ReadWriteTimeout = 15000;
+            req.UserAgent = "Mozilla/5.0 (Nova-Life server image cache)";
+            req.AllowAutoRedirect = true;
+            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+            {
+                if (resp.StatusCode != HttpStatusCode.OK || resp.ContentLength > 5 * 1024 * 1024)
+                {
+                    return null;
+                }
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    Stream st = resp.GetResponseStream();
+                    byte[] buf = new byte[16384];
+                    int n;
+                    while ((n = st.Read(buf, 0, buf.Length)) > 0)
+                    {
+                        ms.Write(buf, 0, n);
+                        if (ms.Length > 5 * 1024 * 1024)
+                        {
+                            return null;
+                        }
+                    }
+                    byte[] data = ms.ToArray();
+                    if (data.Length < 100)
+                    {
+                        return null;
+                    }
+                    bool isPng = data[0] == 0x89 && data[1] == 0x50;
+                    bool isJpg = data[0] == 0xFF && data[1] == 0xD8;
+                    if (!isPng && !isJpg)
+                    {
+                        return null; // le client ne charge que png/jpg
+                    }
+                    File.WriteAllBytes(isPng ? pngFile : jpgFile, data);
+                    return SeriBase() + hash + (isPng ? ".png" : ".jpg");
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void ServeSerigraphie(HttpListenerContext ctx, string path)
+    {
+        try
+        {
+            string name = Path.GetFileName(path);
+            if (!Regex.IsMatch(name, "^[0-9a-f]{40}\\.(png|jpg)$"))
+            {
+                ctx.Response.StatusCode = 404;
+                ctx.Response.OutputStream.Close();
+                return;
+            }
+            string file = Path.Combine(Path.Combine(pluginDir, "sericache"), name);
+            if (!File.Exists(file))
+            {
+                ctx.Response.StatusCode = 404;
+                ctx.Response.OutputStream.Close();
+                return;
+            }
+            byte[] data = File.ReadAllBytes(file);
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = name.EndsWith(".png") ? "image/png" : "image/jpeg";
+            ctx.Response.Headers["Cache-Control"] = "public, max-age=2592000";
+            ctx.Response.ContentLength64 = data.Length;
+            ctx.Response.OutputStream.Write(data, 0, data.Length);
+            ctx.Response.OutputStream.Close();
+        }
+        catch
+        {
+            try { ctx.Response.StatusCode = 500; ctx.Response.OutputStream.Close(); } catch { }
+        }
     }
 
     private string ApiAntiCheat()
