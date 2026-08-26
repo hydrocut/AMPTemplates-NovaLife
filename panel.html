@@ -147,6 +147,9 @@ button.chip img{width:26px;height:26px;object-fit:contain}
   .pickgrid{grid-template-columns:repeat(auto-fill,minmax(88px,1fr));max-height:60vh}
   .vico{width:52px;height:30px}
 }
+.hide-mobile{}
+.only-mobile{display:none}
+@media (max-width: 820px){ .hide-mobile{display:none} .only-mobile{display:inline-block} .desktop-actions{display:none} }
 @media (max-width: 480px){
   .brand-sub{display:none}
   #home-link{width:30px;height:30px;font-size:15px}
@@ -214,7 +217,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
     <div class="tblwrap">
     <table>
-      <thead><tr><th>Pseudo</th><th>Personnage</th><th>SteamID</th><th>Vie</th><th>Espèces</th><th>Banque</th><th>Position</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Pseudo</th><th>Personnage</th><th class="hide-mobile">SteamID</th><th>Vie</th><th>Espèces</th><th>Banque</th><th class="hide-mobile">Position</th><th>Actions</th></tr></thead>
       <tbody id="players"><tr><td colspan="8" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
@@ -293,7 +296,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
     <div class="tblwrap">
     <table>
-      <thead><tr><th></th><th>Compte Steam</th><th>Personnage</th><th>SteamID</th><th>Espèces</th><th>Banque</th><th>Kicks</th><th>Bans</th><th>Statut</th><th>Actions</th></tr></thead>
+      <thead><tr><th></th><th>Compte Steam</th><th class="hide-mobile">Personnage</th><th class="hide-mobile">SteamID</th><th>Espèces</th><th>Banque</th><th class="hide-mobile">Kicks</th><th class="hide-mobile">Bans</th><th>Statut</th><th>Actions</th></tr></thead>
       <tbody id="history"><tr><td colspan="10" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
@@ -494,6 +497,35 @@ var playersCache = [];
 
 var refreshTick = 0;
 
+function playerActions(id){
+  var pl = playersCache.filter(function(p){ return p.steamId === id; })[0];
+  var who = pl ? pl.pseudo : id;
+  var b = '';
+  b += '<button onclick="closeModal();msgPlayer(\'' + id + '\')">💬 Message privé</button>';
+  b += '<button onclick="closeModal();moneyPlayer(\'' + id + '\')">€ Argent (espèces / banque)</button>';
+  b += '<button onclick="closeModal();healPlayer(\'' + id + '\')">❤ Soigner</button>';
+  b += '<button onclick="closeModal();tpPlayer(\'' + id + '\')">📍 Téléporter</button>';
+  b += '<button onclick="closeModal();notifyPlayer(\'' + id + '\')">📢 Notification</button>';
+  b += '<button onclick="closeModal();xpPlayer(\'' + id + '\')">✨ Donner de l XP</button>';
+  b += '<button onclick="closeModal();prisonPlayer(\'' + id + '\')">⚖ Prison / libérer</button>';
+  b += '<button onclick="closeModal();permisPlayer(\'' + id + '\')">🚦 Points de permis</button>';
+  b += '<button onclick="closeModal();localMsgPlayer(\'' + id + '\')">📍 Message local</button>';
+  b += '<button class="danger" onclick="closeModal();kickPlayer(\'' + id + '\')">Kick</button>';
+  b += '<button class="danger" onclick="closeModal();banPlayer(\'' + id + '\')">Ban</button>';
+  openModal('<h3>' + esc(who) + '</h3>' + b);
+}
+function histActions(cid, steamId, banned){
+  var a = historyCache.filter(function(x){ return x.steamId === steamId; })[0];
+  var username = a ? (a.username || '') : '';
+  var b = '';
+  b += '<button onclick="closeModal();playerCard(' + cid + ',\'' + esc(username) + '\')">📇 Fiche complète</button>';
+  b += '<button onclick="closeModal();offInv(' + cid + ',\'' + esc(username) + '\')">Inventaire</button>';
+  b += '<button onclick="closeModal();offGarage(' + cid + ',\'' + esc(username) + '\')">Garage</button>';
+  if(banned) b += '<button onclick="closeModal();histUnban(\'' + steamId + '\')">Débannir</button>';
+  else b += '<button class="danger" onclick="closeModal();histBan(\'' + steamId + '\')">Ban</button>';
+  openModal('<h3>' + esc(username) + '</h3>' + b);
+}
+
 function renderPlayers(){
   var tb = document.getElementById('players');
   var q = (document.getElementById('players-filter').value || '').trim().toLowerCase();
@@ -511,12 +543,14 @@ function renderPlayers(){
     return '<tr>' +
       '<td>' + esc(p.pseudo) + admin + '</td>' +
       '<td>' + perso + '</td>' +
-      '<td class="mono">' + p.steamId + '</td>' +
+      '<td class="mono hide-mobile">' + p.steamId + '</td>' +
       '<td><span class="hp" style="background:' + hpColor(p.health) + '22;color:' + hpColor(p.health) + '">' + p.health + '</span></td>' +
       '<td>' + fmtMoney(p.money) + '</td>' +
       '<td>' + fmtMoney(p.bank) + '</td>' +
-      '<td class="mono muted">' + pos + '</td>' +
+      '<td class="mono muted hide-mobile">' + pos + '</td>' +
       '<td class="actions">' +
+        '<button class="only-mobile primary" onclick="playerActions(' + "'" + p.steamId + "'" + ')">Actions ▾</button>' +
+        '<span class="desktop-actions">' +
         '<button onclick="msgPlayer(\'' + p.steamId + '\')" title="Message privé">MSG</button>' +
         '<button onclick="moneyPlayer(\'' + p.steamId + '\')" title="Espèces / banque">€</button>' +
         '<button onclick="healPlayer(\'' + p.steamId + '\')" title="Soigner">Soin</button>' +
@@ -524,6 +558,7 @@ function renderPlayers(){
         '<button class="danger" onclick="kickPlayer(\'' + p.steamId + '\')">Kick</button>' +
         '<button class="danger" onclick="banPlayer(\'' + p.steamId + '\')">Ban</button>' +
         '<button onclick="morePlayer(\'' + p.steamId + '\')" title="Autres actions">+</button>' +
+        '</span>' +
       '</td></tr>';
   }).join('');
 }
@@ -1267,12 +1302,15 @@ function renderHistory(){
       '<td>' + a.bans + (a.banned && a.banReason ? ' <span class="muted" title="' + esc(a.banReason) + '">ℹ</span>' : '') + '</td>' +
       '<td>' + statut + '</td>' +
       '<td class="actions">' +
+        (a.characterId > 0 ? '<button class="only-mobile primary" onclick="histActions(' + a.characterId + ',' + "'" + a.steamId + "'" + ',' + (a.banned?1:0) + ')">Actions ▾</button>' : '') +
+        '<span class="desktop-actions">' +
         (a.characterId > 0 ? '<button onclick="playerCard(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Fiche</button>' +
           '<button onclick="offInv(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Inv</button>' +
           '<button onclick="offGarage(' + a.characterId + ',\'' + esc(a.username||'') + '\')">Garage</button>' : '') +
         (a.banned
           ? '<button onclick="histUnban(\'' + a.steamId + '\')">Débannir</button>'
           : '<button class="danger" onclick="histBan(\'' + a.steamId + '\')">Ban</button>') +
+        '</span>' +
       '</td></tr>';
   }).join('');
 }
