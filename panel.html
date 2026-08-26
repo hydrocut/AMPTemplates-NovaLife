@@ -147,6 +147,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
   .pickgrid{grid-template-columns:repeat(auto-fill,minmax(88px,1fr));max-height:60vh}
   .vico{width:52px;height:30px}
 }
+[data-tab]{display:none}
 .hide-mobile{}
 .only-mobile{display:none}
 @media (max-width: 820px){ .hide-mobile{display:none} .only-mobile{display:inline-block} .desktop-actions{display:none} }
@@ -955,7 +956,11 @@ function applyRole(){
 
 function showTab(name){
   document.querySelectorAll('[data-tab]').forEach(function(el){
-    el.style.display = el.getAttribute('data-tab') === name ? '' : 'none';
+    if(el.getAttribute('data-tab') === name){
+      el.style.display = el.classList.contains('cards') ? 'grid' : 'block';
+    } else {
+      el.style.display = 'none';
+    }
   });
   document.querySelectorAll('#tabs button').forEach(function(b){
     b.className = b.getAttribute('data-nav') === name ? 'active' : '';
