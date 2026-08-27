@@ -69,7 +69,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.11 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.11.2 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -87,7 +87,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.11 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.11.2 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -199,9 +199,15 @@ public class TKAntiCheat : Plugin
         return t;
     }
 
+    private static bool IsAdmin(Player p)
+    {
+        try { return p != null && p.account != null && p.account.adminLevel > 0; }
+        catch { return false; }
+    }
+
     private void OnMoney(Player p, double amount, string reason, bool bank)
     {
-        if (p == null || amount <= 0)
+        if (p == null || amount <= 0 || IsAdmin(p))
         {
             return;
         }
@@ -230,7 +236,7 @@ public class TKAntiCheat : Plugin
     // ou accumulation rapide du même item.
     private void OnItem(Player p, int itemId, int number)
     {
-        if (p == null || number <= 0)
+        if (p == null || number <= 0 || IsAdmin(p))
         {
             return;
         }
@@ -683,6 +689,52 @@ public class TKAntiCheat : Plugin
     }
 
     // Appelé par le ticker sur le thread principal
+    private static bool IsBadVec(Vector3 v)
+    {
+        return float.IsNaN(v.x) || float.IsInfinity(v.x)
+            || float.IsNaN(v.y) || float.IsInfinity(v.y)
+            || float.IsNaN(v.z) || float.IsInfinity(v.z);
+    }
+
+    private readonly Dictionary<ulong, float> badPosLastAlert = new Dictionary<ulong, float>();
+    private long badPosFixed;
+
+    private void HandleBadPosition(Player p, Track t, float now)
+    {
+        bool haveSafe = t.hasPos && !IsBadVec(t.lastPos);
+        if (haveSafe)
+        {
+            try
+            {
+                p.setup.transform.position = t.lastPos;
+                Rigidbody rb = p.setup.GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.velocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+            }
+            catch
+            {
+            }
+        }
+        else
+        {
+            // pas de position de repli : on coupe pour arrêter la propagation
+            try { p.Disconnect("Position corrompue (protection anti-crash serveur)"); } catch { }
+        }
+        badPosFixed++;
+        float last;
+        badPosLastAlert.TryGetValue(p.steamId, out last);
+        if (now - last >= 15f)
+        {
+            badPosLastAlert[p.steamId] = now;
+            Alert("CRASH-POS", SafePseudo(p), p.steamId,
+                haveSafe ? "position NaN/Infinity corrigée — tentative d'écran noir neutralisée"
+                         : "position NaN sans repli — joueur déconnecté");
+        }
+    }
+
     // Anti-fly : le véhicule occupé plane-t-il au-dessus de tout support ?
     // Raycast vers le bas (la carte et ses colliders sont chargés côté
     // serveur). En chute libre la hauteur diminue vite -> on ne compte que
@@ -741,7 +793,22 @@ public class TKAntiCheat : Plugin
             Track t = GetTrack(p.steamId);
             Vector3 pos;
             try { pos = p.setup.transform.position; } catch { continue; }
-
+            // Garde anti-crash « écran noir » (pour TOUS, admins compris) :
+            // une position NaN/Infinity casse les matrices de collider de
+            // tout le monde. On la corrige avant tout le reste.
+            if (IsBadVec(pos))
+            {
+                HandleBadPosition(p, t, now);
+                continue;
+            }
+            if (IsAdmin(p))
+            {
+                t.lastPos = pos;
+                t.lastTime = now;
+                t.hasPos = true;
+                t.lastY = pos.y;
+                continue; // admins exclus des heuristiques vitesse/téléport/fly
+            }
             if (!t.hasPos)
             {
                 t.lastPos = pos;
@@ -1489,7 +1556,10 @@ public class TKAntiCheatConfig
     // (véhicule passé fantôme, reconnexion en voiture, passager) en envoie
     // légitimement sur un véhicule qui n'est plus « à lui » — ce n'est pas
     // un mod menu. Comptés à part, jamais alertés ni sanctionnés.
-    public string menuShieldIgnore = "CmdSendInputs";
+    // Motifs de commandes ignorés par MenuShield (sous-chaîne du nom
+    // Composant.Méthode). Les commandes véhicule (Vehicle*, RCC*) suivent
+    // un modèle d'autorité propre au jeu et faux-positivent : exclues.
+    public string menuShieldIgnore = "CmdSendInputs,Vehicle,RCC";
     // CrashGuard : jette les commandes spoofées (hash inconnu) et les payloads
     // NaN/Infinity qui provoquent les écrans noirs. Actif par défaut.
     public bool crashGuard = true;
