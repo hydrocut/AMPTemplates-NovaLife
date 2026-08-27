@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=79
-Meta.ReleaseNotes=Panel v3.9 : fiches Steam (heures Nova-Life, age du compte via cle API), section Nouveaux arrivants parametrable dans Comptes, dossiers de preuves exportables (.txt) pour signalement Steam ou plainte.
+Meta.ConfigVersion=80
+Meta.ReleaseNotes=Panel v3.9.1 : Nouveaux arrivants = vraies creations de comptes (les veterans n apparaissent plus), bon appid Steam du jeu (885570) pour les heures, colonne Personnages RP.
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]

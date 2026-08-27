@@ -352,7 +352,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
   </section>
 
   <section data-tab="comptes">
-    <h2>🆕 Nouveaux arrivants <span class="muted" style="font-weight:400;font-size:12px">— comptes vus pour la première fois récemment, à surveiller</span></h2>
+    <h2>🆕 Nouveaux arrivants <span class="muted" style="font-weight:400;font-size:12px">— créations de comptes détectées sur le serveur, à surveiller</span> <span id="np-since" class="muted" style="font-weight:400;font-size:12px"></span></h2>
     <div class="row" style="margin-bottom:8px">
       <label style="font-size:13px">Période : <input id="np-days" type="number" min="1" max="365" value="7" style="width:70px"> jours</label>
       <button onclick="loadNewPlayers()">Actualiser</button>
@@ -360,8 +360,8 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
     <div class="tblwrap">
     <table>
-      <thead><tr><th>Pseudo</th><th>SteamID</th><th>Première connexion</th><th>Dernière</th><th>IPs</th><th>Heures Nova</th><th>Compte Steam créé</th><th></th></tr></thead>
-      <tbody id="npbody"><tr><td colspan="8" class="muted">Chargement…</td></tr></tbody>
+      <thead><tr><th>Pseudo</th><th>Personnage(s)</th><th>SteamID</th><th>Compte créé (détecté)</th><th>Dernière connexion</th><th>IPs</th><th>Heures Nova</th><th>Compte Steam créé</th><th></th></tr></thead>
+      <tbody id="npbody"><tr><td colspan="9" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
   </section>
@@ -1105,10 +1105,12 @@ function loadNewPlayers(){
   localStorage.setItem('tkweb_npdays', days);
   api('newplayers', {days: days}).then(function(r){
     var tb = document.getElementById('npbody');
-    if(r.error){ tb.innerHTML = '<tr><td colspan="8" class="muted">' + esc(r.error) + '</td></tr>'; return; }
-    if(!r.players.length){ tb.innerHTML = '<tr><td colspan="8" class="muted">Aucun nouveau joueur sur les ' + r.days + ' derniers jours</td></tr>'; return; }
+    if(r.error){ tb.innerHTML = '<tr><td colspan="9" class="muted">' + esc(r.error) + '</td></tr>'; return; }
+    var sinceEl = document.getElementById('np-since');
+    if(sinceEl && r.since) sinceEl.textContent = '· suivi actif depuis le ' + new Date(r.since * 1000).toLocaleDateString('fr-FR') + ' (les comptes plus anciens ne sont pas listés)';
+    if(!r.players.length){ tb.innerHTML = '<tr><td colspan="9" class="muted">Aucun compte créé sur les ' + r.days + ' derniers jours</td></tr>'; return; }
     tb.innerHTML = r.players.map(function(p){
-      return '<tr><td>' + esc(p.name || '?') + '</td><td>' + slinkSteam(p.steamId) + '</td><td>' + fmtUnix(p.first) + '</td><td>' + fmtUnix(p.last) + '</td><td>' + p.ips + '</td>' +
+      return '<tr><td>' + esc(p.name || '?') + '</td><td>' + esc(p.chars || '—') + '</td><td>' + slinkSteam(p.steamId) + '</td><td>' + fmtUnix(p.first) + '</td><td>' + fmtUnix(p.last) + '</td><td>' + p.ips + '</td>' +
         '<td class="np-steam"><button onclick="npSteam(this,\'' + p.steamId + '\')" style="font-size:11px;padding:3px 8px">Charger</button></td>' +
         '<td class="np-created">—</td>' +
         '<td><button onclick="steamMenu(\'' + p.steamId + '\')" style="font-size:11px;padding:3px 8px">Menu</button></td></tr>';

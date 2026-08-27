@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.9 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.9.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -4817,7 +4817,7 @@ public class TKWebPanel : Plugin
             try
             {
                 string og = HttpGetShort("https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=" + key + "&steamid=" + sid + "&include_played_free_games=1");
-                Match mg = Regex.Match(og, "\"appid\"\\s*:\\s*1665030[^}]*?\"playtime_forever\"\\s*:\\s*([0-9]+)");
+                Match mg = Regex.Match(og, "\"appid\"\\s*:\\s*885570[^}]*?\"playtime_forever\"\\s*:\\s*([0-9]+)");
                 if (mg.Success)
                 {
                     long.TryParse(mg.Groups[1].Value, out minutes);
@@ -4849,6 +4849,129 @@ public class TKWebPanel : Plugin
         }
     }
 
+    // ------------------------------------------------------------------
+    // Suivi des créations de comptes (v3.9.1). La base du jeu ne stocke
+    // aucune date de création : on scanne la table Accounts toutes les
+    // 5 min et on horodate l'APPARITION de chaque SteamId. Les comptes
+    // présents au tout premier scan sont marqués 0 (vétérans, date
+    // inconnue) et n'apparaissent jamais dans « Nouveaux arrivants ».
+    private readonly Dictionary<string, long> accountSeen = new Dictionary<string, long>();
+    private readonly Dictionary<string, string> accountNames = new Dictionary<string, string>();
+    private readonly object acctLock = new object();
+    private long acctTrackStart;
+    private long acctLastScan;
+    private bool acctLoaded;
+
+    private string AcctSeenPath() { return Path.Combine(pluginDir, "accountseen.tsv"); }
+
+    private void LoadAccountSeen()
+    {
+        if (acctLoaded)
+        {
+            return;
+        }
+        acctLoaded = true;
+        try
+        {
+            if (!File.Exists(AcctSeenPath()))
+            {
+                return;
+            }
+            foreach (string line in File.ReadAllLines(AcctSeenPath()))
+            {
+                string[] p = line.Split('\t');
+                if (p.Length < 2)
+                {
+                    continue;
+                }
+                if (p[0] == "#start")
+                {
+                    long.TryParse(p[1], out acctTrackStart);
+                    continue;
+                }
+                long v;
+                long.TryParse(p[1], out v);
+                accountSeen[p[0]] = v;
+                if (p.Length >= 3)
+                {
+                    accountNames[p[0]] = p[2];
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void ScanNewAccounts()
+    {
+        long now = NowUnix();
+        if (now - acctLastScan < 300)
+        {
+            return;
+        }
+        acctLastScan = now;
+        List<RankAcct> rows;
+        try
+        {
+            SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+            try
+            {
+                rows = conn.Query<RankAcct>("SELECT Id, SteamId, Username FROM Accounts");
+            }
+            finally
+            {
+                conn.Close();
+            }
+        }
+        catch
+        {
+            return;
+        }
+        bool dirty = false;
+        lock (acctLock)
+        {
+            LoadAccountSeen();
+            bool first = acctTrackStart == 0;
+            if (first)
+            {
+                acctTrackStart = now;
+                dirty = true;
+            }
+            foreach (RankAcct a in rows)
+            {
+                if (a == null || string.IsNullOrEmpty(a.SteamId))
+                {
+                    continue;
+                }
+                if (!accountSeen.ContainsKey(a.SteamId))
+                {
+                    accountSeen[a.SteamId] = first ? 0 : now; // 0 = déjà là avant le suivi
+                    dirty = true;
+                }
+                string prev;
+                if (!accountNames.TryGetValue(a.SteamId, out prev) || prev != (a.Username ?? ""))
+                {
+                    accountNames[a.SteamId] = a.Username ?? "";
+                    dirty = true;
+                }
+            }
+            if (dirty)
+            {
+                StringBuilder fb = new StringBuilder();
+                fb.Append("#start\t").Append(acctTrackStart).Append('\n');
+                foreach (KeyValuePair<string, long> kv in accountSeen)
+                {
+                    string nm;
+                    accountNames.TryGetValue(kv.Key, out nm);
+                    fb.Append(kv.Key).Append('\t').Append(kv.Value).Append('\t')
+                      .Append((nm ?? "").Replace('\t', ' ')).Append('\n');
+                }
+                File.WriteAllText(AcctSeenPath(), fb.ToString());
+            }
+        }
+    }
+
     private static long ExtractFirstUnix(string row)
     {
         Match m = Regex.Match(row, "\"first\":([0-9]+)");
@@ -4863,23 +4986,83 @@ public class TKWebPanel : Plugin
         if (days < 1) days = 1;
         if (days > 365) days = 365;
         long cutoff = NowUnix() - (long)days * 86400;
-        List<string> rows = new List<string>();
-        lock (identLock)
+        try
         {
-            foreach (KeyValuePair<string, Ident> kv in identities)
+            ScanNewAccounts(); // rafraîchit si le dernier scan date de > 5 min
+        }
+        catch
+        {
+        }
+        Dictionary<string, string> charNames = new Dictionary<string, string>();
+        try
+        {
+            SQLite.SQLiteConnection cdb = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+            try
             {
-                long first = long.MaxValue, last = 0;
-                foreach (KeyValuePair<string, IdentIp> ip in kv.Value.ips)
+                foreach (CharNameRow cr in cdb.Query<CharNameRow>(
+                    "SELECT a.SteamId AS SteamId, c.Firstname AS Firstname, c.Lastname AS Lastname FROM Characters c JOIN Accounts a ON a.Id = c.AccountId"))
                 {
-                    if (ip.Value.first > 0 && ip.Value.first < first) first = ip.Value.first;
-                    if (ip.Value.last > last) last = ip.Value.last;
+                    if (cr == null || string.IsNullOrEmpty(cr.SteamId))
+                    {
+                        continue;
+                    }
+                    string full = ((cr.Firstname ?? "") + " " + (cr.Lastname ?? "")).Trim();
+                    if (full.Length == 0)
+                    {
+                        continue;
+                    }
+                    string ex;
+                    charNames[cr.SteamId] = charNames.TryGetValue(cr.SteamId, out ex) ? ex + ", " + full : full;
                 }
-                if (first == long.MaxValue || first < cutoff)
+            }
+            finally
+            {
+                cdb.Close();
+            }
+        }
+        catch
+        {
+        }
+        List<string> rows = new List<string>();
+        long since;
+        lock (acctLock)
+        {
+            LoadAccountSeen();
+            since = acctTrackStart;
+            foreach (KeyValuePair<string, long> kv in accountSeen)
+            {
+                if (kv.Value <= 0 || kv.Value < cutoff)
                 {
-                    continue;
+                    continue; // 0 = vétéran (compte antérieur au suivi)
                 }
-                rows.Add("{\"steamId\":\"" + kv.Key + "\",\"name\":" + Json.Str(kv.Value.name ?? "")
-                    + ",\"first\":" + first + ",\"last\":" + last + ",\"ips\":" + kv.Value.ips.Count + "}");
+                string nm;
+                accountNames.TryGetValue(kv.Key, out nm);
+                long last = 0;
+                int ipCount = 0;
+                lock (identLock)
+                {
+                    Ident id;
+                    if (identities.TryGetValue(kv.Key, out id))
+                    {
+                        ipCount = id.ips.Count;
+                        foreach (KeyValuePair<string, IdentIp> ip in id.ips)
+                        {
+                            if (ip.Value.last > last)
+                            {
+                                last = ip.Value.last;
+                            }
+                        }
+                        if (string.IsNullOrEmpty(nm))
+                        {
+                            nm = id.name;
+                        }
+                    }
+                }
+                string cn;
+                charNames.TryGetValue(kv.Key, out cn);
+                rows.Add("{\"steamId\":\"" + kv.Key + "\",\"name\":" + Json.Str(nm ?? "")
+                    + ",\"chars\":" + Json.Str(cn ?? "")
+                    + ",\"first\":" + kv.Value + ",\"last\":" + last + ",\"ips\":" + ipCount + "}");
             }
         }
         rows.Sort(delegate (string x, string y) { return ExtractFirstUnix(y).CompareTo(ExtractFirstUnix(x)); });
@@ -4887,7 +5070,7 @@ public class TKWebPanel : Plugin
         {
             rows.RemoveRange(300, rows.Count - 300);
         }
-        return "{\"days\":" + days + ",\"players\":[" + string.Join(",", rows.ToArray()) + "]}";
+        return "{\"days\":" + days + ",\"since\":" + since + ",\"players\":[" + string.Join(",", rows.ToArray()) + "]}";
     }
 
     private string DossierPath() { return Path.Combine(pluginDir, "dossiers.json"); }
@@ -5040,6 +5223,13 @@ public class TKWebPanel : Plugin
             Thread.Sleep(30 * 1000);
             while (true)
             {
+                try
+                {
+                    ScanNewAccounts();
+                }
+                catch
+                {
+                }
                 try
                 {
                     object snap = RunOnMain(delegate
@@ -5374,6 +5564,12 @@ public class TKWebPanel : Plugin
         public int StatCopper { get; set; }
         public int StatDiamond { get; set; }
         public double WorkTime { get; set; }
+    }
+    private class CharNameRow
+    {
+        public string SteamId { get; set; }
+        public string Firstname { get; set; }
+        public string Lastname { get; set; }
     }
     private class RankAcct
     {
