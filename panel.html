@@ -1241,7 +1241,25 @@ function loadNewPlayers(){
         '<td class="np-created">—</td>' +
         '<td><button onclick="steamMenu(\'' + p.steamId + '\')" style="font-size:11px;padding:3px 8px">Menu</button></td></tr>';
     }).join('');
+    // chargement automatique en cascade (doux pour l'API Steam : 1 toutes les 600 ms)
+    npAutoLoad();
   });
+}
+var npAutoTimer = null;
+function npAutoLoad(){
+  if(npAutoTimer) { clearInterval(npAutoTimer); npAutoTimer = null; }
+  var tb = document.getElementById('npbody');
+  if(!tb) return;
+  var btns = [].slice.call(tb.querySelectorAll('.np-steam button'));
+  var i = 0;
+  npAutoTimer = setInterval(function(){
+    if(i >= btns.length || localStorage.getItem('tkweb_tab') !== 'comptes'){ clearInterval(npAutoTimer); npAutoTimer = null; return; }
+    var b = btns[i++];
+    if(b && b.textContent === 'Charger' && b.getAttribute('onclick')){
+      var m = b.getAttribute('onclick').match(/npSteam\(this,'([0-9]+)'\)/);
+      if(m) npSteam(b, m[1]);
+    }
+  }, 600);
 }
 function npSteam(btn, sid){
   btn.textContent = '…';
