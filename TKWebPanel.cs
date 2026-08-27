@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.9.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.10 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -745,6 +745,7 @@ public class TKWebPanel : Plugin
             case "/api/mapcalib":  // GET seulement, le POST (calibrer) est filtré plus bas
             case "/api/mapvehicles":
             case "/api/steaminfo":
+            case "/api/playtime":
             case "/api/newplayers":
             case "/api/ghoststats":
             case "/api/heavyareas":
@@ -874,6 +875,8 @@ public class TKWebPanel : Plugin
                 return ApiServerLog(body);
             case "/api/steaminfo":
                 return ApiSteamInfo(body);
+            case "/api/playtime":
+                return ApiPlaytime(body);
             case "/api/newplayers":
                 return ApiNewPlayers(body);
             case "/api/dossier":
@@ -4855,6 +4858,104 @@ public class TKWebPanel : Plugin
     // 5 min et on horodate l'APPARITION de chaque SteamId. Les comptes
     // présents au tout premier scan sont marqués 0 (vétérans, date
     // inconnue) et n'apparaissent jamais dans « Nouveaux arrivants ».
+    // ------------------------------------------------------------------
+    // Temps de jeu sur CE serveur (v3.10). Le jeu ne le stocke pas : le
+    // panel l'accumule lui-même — à chaque tick du journal d'identités
+    // (20 s), chaque joueur en ligne gagne le delta écoulé. Persisté dans
+    // playtime.tsv (steamId \t secondes), sauvegardé toutes les 2 min.
+    private readonly Dictionary<string, long> playSeconds = new Dictionary<string, long>();
+    private readonly object playLock = new object();
+    private long playLastTick;
+    private long playLastSave;
+    private bool playLoaded;
+
+    private string PlaytimePath() { return Path.Combine(pluginDir, "playtime.tsv"); }
+
+    private void LoadPlaytime()
+    {
+        if (playLoaded)
+        {
+            return;
+        }
+        playLoaded = true;
+        try
+        {
+            if (!File.Exists(PlaytimePath()))
+            {
+                return;
+            }
+            foreach (string line in File.ReadAllLines(PlaytimePath()))
+            {
+                string[] p = line.Split('\t');
+                if (p.Length < 2)
+                {
+                    continue;
+                }
+                long v;
+                long.TryParse(p[1], out v);
+                playSeconds[p[0]] = v;
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void TickPlaytime(List<string> onlineRows)
+    {
+        long now = NowUnix();
+        lock (playLock)
+        {
+            LoadPlaytime();
+            long delta = playLastTick > 0 ? now - playLastTick : 0;
+            playLastTick = now;
+            if (onlineRows == null || onlineRows.Count == 0 || delta <= 0 || delta > 120)
+            {
+                return; // pause/lag important : on ne crédite pas
+            }
+            foreach (string r in onlineRows)
+            {
+                int tab = r.IndexOf('\t');
+                string sid = tab > 0 ? r.Substring(0, tab) : r;
+                long v;
+                playSeconds.TryGetValue(sid, out v);
+                playSeconds[sid] = v + delta;
+            }
+            if (now - playLastSave >= 120)
+            {
+                playLastSave = now;
+                StringBuilder sb = new StringBuilder();
+                foreach (KeyValuePair<string, long> kv in playSeconds)
+                {
+                    sb.Append(kv.Key).Append('\t').Append(kv.Value).Append('\n');
+                }
+                File.WriteAllText(PlaytimePath(), sb.ToString());
+            }
+        }
+    }
+
+    private string ApiPlaytime(string body)
+    {
+        string sid = Json.GetString(body, "steamId", "").Trim();
+        if (!Regex.IsMatch(sid, "^7656119[0-9]{10}$"))
+        {
+            return "{\"error\":\"SteamID invalide\"}";
+        }
+        long v;
+        long since;
+        lock (playLock)
+        {
+            LoadPlaytime();
+            playSeconds.TryGetValue(sid, out v);
+        }
+        lock (acctLock)
+        {
+            LoadAccountSeen();
+            since = acctTrackStart;
+        }
+        return "{\"seconds\":" + v + ",\"since\":" + since + "}";
+    }
+
     private readonly Dictionary<string, long> accountSeen = new Dictionary<string, long>();
     private readonly Dictionary<string, string> accountNames = new Dictionary<string, string>();
     private readonly object acctLock = new object();
@@ -5060,8 +5161,15 @@ public class TKWebPanel : Plugin
                 }
                 string cn;
                 charNames.TryGetValue(kv.Key, out cn);
+                long srv;
+                lock (playLock)
+                {
+                    LoadPlaytime();
+                    playSeconds.TryGetValue(kv.Key, out srv);
+                }
                 rows.Add("{\"steamId\":\"" + kv.Key + "\",\"name\":" + Json.Str(nm ?? "")
                     + ",\"chars\":" + Json.Str(cn ?? "")
+                    + ",\"srvMin\":" + (srv / 60)
                     + ",\"first\":" + kv.Value + ",\"last\":" + last + ",\"ips\":" + ipCount + "}");
             }
         }
@@ -5250,6 +5358,13 @@ public class TKWebPanel : Plugin
                         return (object)rows;
                     });
                     List<string> list = (List<string>)snap;
+                    try
+                    {
+                        TickPlaytime(list);
+                    }
+                    catch
+                    {
+                    }
                     if (list != null && list.Count > 0)
                     {
                         long now = NowUnix();
