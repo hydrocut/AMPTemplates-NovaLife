@@ -1806,6 +1806,8 @@ function loadAcConfig(){
       sw('adminIpGuard', 'Garde IP des comptes admin', c.adminIpGuard, '— alerte si un admin se connecte depuis une IP jamais vue') +
       sw('adminIpKick', 'Kick si IP admin inconnue', c.adminIpKick, '— à activer une fois les IP habituelles apprises') +
       sw('spamKick', 'Kick auto des spammeurs', c.spamKick, '— commandes/chat en rafale') +
+      sw('menuShield', 'Bouclier commandes (anti mod-menu)', c.menuShield, '— identifie le joueur qui envoie des ordres réseau sans autorité et bloque l’ordre') +
+      sw('menuShieldKick', 'Kick auto mod-menu', c.menuShieldKick, '— éjecte le joueur après 3 ordres non autorisés') +
       sw('enabled', 'Anti-cheat activé (global)', c.enabled, '') +
       '<div class="muted" style="margin-top:8px;font-size:12px">' + c.whitelistCount + ' admin(s) en liste blanche · argent alerte > ' + Number(c.moneyThreshold).toLocaleString('fr-FR') + ' · vitesse max ' + c.maxSpeed + ' m/s · modifs appliquées sous ~20 s</div>';
   }).catch(function(){});

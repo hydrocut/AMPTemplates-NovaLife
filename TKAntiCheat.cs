@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKAntiCheat v1.7.1 — TeamKit.fr
+/// TKAntiCheat v1.8 — TeamKit.fr
 ///
 /// Anti-cheat serveur "de base" pour Nova-Life. MODE ALERTE UNIQUEMENT :
 /// il détecte et signale, il ne sanctionne jamais automatiquement (aucun
@@ -65,7 +65,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.7.1 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.8 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -83,7 +83,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.7.1 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.8 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -762,6 +762,169 @@ public class TKAntiCheat : Plugin
         return "Joueur " + p.steamId;
     }
 
+    // ------------------------------------------------------------------
+    // MenuShield (v1.8) : remplace le handler Mirror des CommandMessage par
+    // un garde qui reproduit le contrôle d'autorité de Mirror. Différence :
+    // Mirror se contente d'un warning anonyme ; ici on retrouve la connexion
+    // fautive -> le joueur -> alerte panel avec pseudo/SteamID + nom de la
+    // commande, et kick optionnel après N violations. Les ordres légitimes
+    // sont transmis tels quels au handler d'origine (aucun impact gameplay ;
+    // si la réflexion échoue, le bouclier se désactive tout seul).
+    private static Action<NetworkConnectionToClient, CommandMessage, int> forwardCommand;
+    private static Func<ushort, bool> cmdRequiresAuth;
+    private static Func<ushort, Mirror.RemoteCalls.RemoteCallDelegate> cmdGetDelegate;
+    private bool menuShieldInstalled;
+    private readonly Dictionary<ulong, int> menuViolations = new Dictionary<ulong, int>();
+    private readonly Dictionary<ulong, float> menuLastAlert = new Dictionary<ulong, float>();
+
+    public void TryInstallMenuShield()
+    {
+        if (menuShieldInstalled || config == null || !config.menuShield)
+        {
+            return;
+        }
+        if (!NetworkServer.active)
+        {
+            return; // le serveur réseau n'est pas encore prêt, on réessaiera
+        }
+        try
+        {
+            System.Reflection.MethodInfo mi = typeof(NetworkServer).GetMethod(
+                "OnCommandMessage",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            if (mi == null)
+            {
+                Debug.LogWarning("[TKAC] MenuShield : OnCommandMessage introuvable — bouclier désactivé");
+                menuShieldInstalled = true;
+                return;
+            }
+            forwardCommand = (Action<NetworkConnectionToClient, CommandMessage, int>)Delegate.CreateDelegate(
+                typeof(Action<NetworkConnectionToClient, CommandMessage, int>), mi);
+            Type rpc = typeof(Mirror.RemoteCalls.RemoteProcedureCalls);
+            System.Reflection.BindingFlags any = System.Reflection.BindingFlags.Static
+                | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            System.Reflection.MethodInfo miAuth = rpc.GetMethod("CommandRequiresAuthority", any);
+            if (miAuth == null)
+            {
+                Debug.LogWarning("[TKAC] MenuShield : CommandRequiresAuthority introuvable — bouclier désactivé");
+                menuShieldInstalled = true;
+                return;
+            }
+            cmdRequiresAuth = (Func<ushort, bool>)Delegate.CreateDelegate(typeof(Func<ushort, bool>), miAuth);
+            System.Reflection.MethodInfo miGet = rpc.GetMethod("GetDelegate", any);
+            if (miGet != null)
+            {
+                try
+                {
+                    cmdGetDelegate = (Func<ushort, Mirror.RemoteCalls.RemoteCallDelegate>)Delegate.CreateDelegate(
+                        typeof(Func<ushort, Mirror.RemoteCalls.RemoteCallDelegate>), miGet);
+                }
+                catch
+                {
+                }
+            }
+            NetworkServer.ReplaceHandler<CommandMessage>(OnCommandGuard, true);
+            menuShieldInstalled = true;
+            Debug.Log("[TKAC] MenuShield actif — les ordres réseau sans autorité sont attribués à leur auteur");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[TKAC] MenuShield non installé (" + ex.Message + ") — comportement Mirror par défaut");
+            menuShieldInstalled = true;
+        }
+    }
+
+    private void OnCommandGuard(NetworkConnectionToClient conn, CommandMessage msg)
+    {
+        try
+        {
+            if (config != null && config.menuShield && conn != null
+                && cmdRequiresAuth != null && cmdRequiresAuth(msg.functionHash))
+            {
+                NetworkIdentity target;
+                if (NetworkServer.spawned.TryGetValue(msg.netId, out target)
+                    && target != null && target.connectionToClient != conn)
+                {
+                    HandleMenuViolation(conn, msg, target);
+                    return; // ordre illégitime : non transmis
+                }
+            }
+        }
+        catch
+        {
+        }
+        try
+        {
+            if (forwardCommand != null)
+            {
+                forwardCommand(conn, msg, 0);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void HandleMenuViolation(NetworkConnectionToClient conn, CommandMessage msg, NetworkIdentity target)
+    {
+        Player author = null;
+        try
+        {
+            foreach (Player p in Nova.server.GetAllPlayers())
+            {
+                if (p != null && ReferenceEquals(p.conn, conn))
+                {
+                    author = p;
+                    break;
+                }
+            }
+        }
+        catch
+        {
+        }
+        string cmdName = "commande inconnue";
+        try
+        {
+            Mirror.RemoteCalls.RemoteCallDelegate rd = cmdGetDelegate != null ? cmdGetDelegate(msg.functionHash) : null;
+            if (rd != null && rd.Method != null)
+            {
+                string comp = rd.Method.DeclaringType != null ? rd.Method.DeclaringType.Name : "?";
+                cmdName = comp + "." + rd.Method.Name.Replace("InvokeUserCode_", "");
+            }
+        }
+        catch
+        {
+        }
+        ulong sid = author != null ? author.steamId : 0;
+        string pseudo = author != null ? SafePseudo(author) : ("connexion #" + conn.connectionId);
+        int n;
+        menuViolations.TryGetValue(sid, out n);
+        n++;
+        menuViolations[sid] = n;
+        bool kick = config.menuShieldKick && n >= config.menuShieldThreshold && author != null;
+        float now = Time.realtimeSinceStartup;
+        float last;
+        menuLastAlert.TryGetValue(sid, out last);
+        if (n == 1 || kick || now - last >= 30f)
+        {
+            menuLastAlert[sid] = now;
+            Alert("MOD-MENU", pseudo, sid, "ordre réseau sans autorité : " + cmdName
+                + " sur « " + (target != null ? target.name : "?") + " » — " + n + " violation(s)"
+                + (kick ? " — kick" : ""));
+        }
+        if (kick)
+        {
+            menuViolations[sid] = 0;
+            try
+            {
+                author.Disconnect("Ordres réseau non autorisés (menu de triche ?)");
+            }
+            catch
+            {
+            }
+        }
+    }
+
     private void Alert(string kind, string pseudo, ulong steamId, string detail)
     {
         string time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
@@ -860,6 +1023,7 @@ public class TKAntiCheatTicker : MonoBehaviour
         accum = 0f;
         try
         {
+            plugin.TryInstallMenuShield();
             plugin.CheckSpeeds(now);
             plugin.CheckAdmins(now);
             plugin.CheckSpoof(now);
@@ -916,6 +1080,14 @@ public class TKAntiCheatConfig
     public int spamThreshold = 12;      // actions max sur la fenetre avant sanction
     public int spamWindowSeconds = 5;
     public bool spamKick = true;        // kick auto le spammeur (choix du user)
+    // Bouclier commandes réseau (anti mod-menu) : intercepte les Commands
+    // Mirror AVANT le jeu et identifie le joueur qui envoie des ordres sur
+    // des objets qu'il ne possède pas — la signature d'un menu de triche.
+    // L'ordre illégitime est bloqué (Mirror l'aurait refusé aussi), mais on
+    // sait désormais QUI, avec le nom de la commande visée.
+    public bool menuShield = true;
+    public bool menuShieldKick = false;
+    public int menuShieldThreshold = 3; // violations avant kick (si kick actif)
     // Raisons de gain d'argent considérées légitimes (sous-chaînes, minuscule)
     public string[] reasonWhitelist = new string[]
     {
@@ -950,6 +1122,9 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"spamThreshold\": " + c.spamThreshold + ",");
         sb.AppendLine("  \"spamWindowSeconds\": " + c.spamWindowSeconds + ",");
         sb.AppendLine("  \"spamKick\": " + (c.spamKick ? "true" : "false") + ",");
+        sb.AppendLine("  \"menuShield\": " + (c.menuShield ? "true" : "false") + ",");
+        sb.AppendLine("  \"menuShieldKick\": " + (c.menuShieldKick ? "true" : "false") + ",");
+        sb.AppendLine("  \"menuShieldThreshold\": " + c.menuShieldThreshold + ",");
         sb.Append("  \"reasonWhitelist\": [");
         for (int i = 0; i < c.reasonWhitelist.Length; i++)
         {
@@ -994,6 +1169,10 @@ public class TKAntiCheatConfig
         c.spamThreshold = (int)GetDouble(json, "spamThreshold", c.spamThreshold);
         c.spamWindowSeconds = (int)GetDouble(json, "spamWindowSeconds", c.spamWindowSeconds);
         c.spamKick = GetBool(json, "spamKick", c.spamKick);
+        c.menuShield = GetBool(json, "menuShield", c.menuShield);
+        c.menuShieldKick = GetBool(json, "menuShieldKick", c.menuShieldKick);
+        c.menuShieldThreshold = (int)GetDouble(json, "menuShieldThreshold", c.menuShieldThreshold);
+        if (c.menuShieldThreshold < 1) c.menuShieldThreshold = 1;
         if (c.spamThreshold < 5) c.spamThreshold = 5;
         if (c.spamWindowSeconds < 2) c.spamWindowSeconds = 2;
         Match m = Regex.Match(json, "\"reasonWhitelist\"\\s*:\\s*\\[(?<v>[^\\]]*)\\]");
