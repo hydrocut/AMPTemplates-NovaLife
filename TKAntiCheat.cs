@@ -89,7 +89,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.12.2 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.12.3 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -689,19 +689,46 @@ public class TKAntiCheat : Plugin
         }
     }
 
-    // Draine la file des IP VPN detectees (appele par le ticker, thread principal).
+    // Draine la file des IP VPN detectees (appele par le ticker, thread
+    // principal). Si le joueur n'est pas encore visible (chargement FastDL
+    // peut durer 60 s), on RE-ESSAIE a chaque tick pendant 3 minutes :
+    // le kick part des qu'il apparait en jeu.
+    private readonly Dictionary<ulong, float> vpnFlagRetry = new Dictionary<ulong, float>();
+
     public void ProcessVpnFlags()
     {
-        List<ulong> todo = null;
+        float now = Time.realtimeSinceStartup;
         lock (vpnLock)
         {
-            if (vpnFlagQueue.Count == 0) return;
-            todo = new List<ulong>(vpnFlagQueue);
+            foreach (ulong sid in vpnFlagQueue)
+            {
+                if (!vpnFlagRetry.ContainsKey(sid))
+                {
+                    vpnFlagRetry[sid] = now + 180f; // deadline de re-essai
+                }
+            }
             vpnFlagQueue.Clear();
         }
-        foreach (ulong sid in todo)
+        if (vpnFlagRetry.Count == 0) return;
+        List<ulong> done = new List<ulong>();
+        foreach (KeyValuePair<ulong, float> kv in vpnFlagRetry)
         {
-            try { FlagVpn(sid, GetIpBySid(sid)); } catch { }
+            if (now > kv.Value)
+            {
+                Debug.Log("[TKAC] VPN : abandon du flag " + kv.Key + " (3 min sans apparaitre en jeu)");
+                done.Add(kv.Key);
+                continue;
+            }
+            bool handled = false;
+            try { handled = FlagVpn(kv.Key, GetIpBySid(kv.Key)); } catch { handled = true; }
+            if (handled)
+            {
+                done.Add(kv.Key);
+            }
+        }
+        foreach (ulong sid in done)
+        {
+            vpnFlagRetry.Remove(sid);
         }
     }
 
@@ -718,7 +745,7 @@ public class TKAntiCheat : Plugin
         return "?";
     }
 
-    private void FlagVpn(ulong sid, string ip)
+    private bool FlagVpn(ulong sid, string ip)
     {
         Player p = null;
         try
@@ -731,13 +758,12 @@ public class TKAntiCheat : Plugin
         catch { }
         if (p == null)
         {
-            Debug.Log("[TKAC] VPN : flag abandonné (joueur " + sid + " introuvable/déconnecté)");
-            return;
+            return false; // pas encore en jeu : on re-essaiera au tick suivant
         }
         if (IsAdmin(p))
         {
             Debug.Log("[TKAC] VPN : flag abandonné (admin) pour " + sid);
-            return;
+            return true;
         }
         bool kick = config.vpnKick;
         Alert("VPN", SafePseudo(p), sid, "connecté via VPN/proxy/datacenter (" + ip + ")"
@@ -746,6 +772,7 @@ public class TKAntiCheat : Plugin
         {
             try { p.Disconnect("VPN/proxy non autorisé — connecte-toi avec ta vraie connexion"); } catch { }
         }
+        return true;
     }
 
     private string GetIp(Player p)
