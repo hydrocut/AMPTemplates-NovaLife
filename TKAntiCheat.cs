@@ -65,7 +65,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.8 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.8.1 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -83,7 +83,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.8 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.8.1 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -865,6 +865,9 @@ public class TKAntiCheat : Plugin
         }
     }
 
+    private long menuQuietCount;
+    private float menuQuietLastLog;
+
     private void HandleMenuViolation(NetworkConnectionToClient conn, CommandMessage msg, NetworkIdentity target)
     {
         Player author = null;
@@ -895,8 +898,36 @@ public class TKAntiCheat : Plugin
         catch
         {
         }
+        // ordres de synchro connus (désync bénigne) : compteur discret, ni
+        // alerte ni sanction — seuls les VRAIS ordres suspects alertent.
+        try
+        {
+            foreach (string pat in (config.menuShieldIgnore ?? "").Split(','))
+            {
+                string q = pat.Trim();
+                if (q.Length > 0 && cmdName.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    menuQuietCount++;
+                    float nowQ = Time.realtimeSinceStartup;
+                    if (nowQ - menuQuietLastLog >= 600f)
+                    {
+                        menuQuietLastLog = nowQ;
+                        Debug.Log("[TKAC] MenuShield : " + menuQuietCount
+                            + " ordre(s) de synchro désynchronisés ignorés depuis le démarrage (" + q + ")");
+                    }
+                    return;
+                }
+            }
+        }
+        catch
+        {
+        }
         ulong sid = author != null ? author.steamId : 0;
         string pseudo = author != null ? SafePseudo(author) : ("connexion #" + conn.connectionId);
+        if (string.IsNullOrEmpty(pseudo) || pseudo.Trim().Length == 0)
+        {
+            pseudo = "Joueur " + sid;
+        }
         int n;
         menuViolations.TryGetValue(sid, out n);
         n++;
@@ -1088,6 +1119,12 @@ public class TKAntiCheatConfig
     public bool menuShield = true;
     public bool menuShieldKick = false;
     public int menuShieldThreshold = 3; // violations avant kick (si kick actif)
+    // Ordres réseau ignorés par le bouclier (sous-chaînes, séparées par des
+    // virgules). CmdSendInputs = synchro volant/pédales : un client désync
+    // (véhicule passé fantôme, reconnexion en voiture, passager) en envoie
+    // légitimement sur un véhicule qui n'est plus « à lui » — ce n'est pas
+    // un mod menu. Comptés à part, jamais alertés ni sanctionnés.
+    public string menuShieldIgnore = "CmdSendInputs";
     // Raisons de gain d'argent considérées légitimes (sous-chaînes, minuscule)
     public string[] reasonWhitelist = new string[]
     {
@@ -1125,6 +1162,7 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"menuShield\": " + (c.menuShield ? "true" : "false") + ",");
         sb.AppendLine("  \"menuShieldKick\": " + (c.menuShieldKick ? "true" : "false") + ",");
         sb.AppendLine("  \"menuShieldThreshold\": " + c.menuShieldThreshold + ",");
+        sb.AppendLine("  \"menuShieldIgnore\": \"" + (c.menuShieldIgnore ?? "").Replace("\\", "").Replace("\"", "") + "\",");
         sb.Append("  \"reasonWhitelist\": [");
         for (int i = 0; i < c.reasonWhitelist.Length; i++)
         {
@@ -1173,6 +1211,8 @@ public class TKAntiCheatConfig
         c.menuShieldKick = GetBool(json, "menuShieldKick", c.menuShieldKick);
         c.menuShieldThreshold = (int)GetDouble(json, "menuShieldThreshold", c.menuShieldThreshold);
         if (c.menuShieldThreshold < 1) c.menuShieldThreshold = 1;
+        Match msi = Regex.Match(json, @"""menuShieldIgnore""\s*:\s*""(?<v>[^""]*)""");
+        if (msi.Success) c.menuShieldIgnore = msi.Groups["v"].Value;
         if (c.spamThreshold < 5) c.spamThreshold = 5;
         if (c.spamWindowSeconds < 2) c.spamWindowSeconds = 2;
         Match m = Regex.Match(json, "\"reasonWhitelist\"\\s*:\\s*\\[(?<v>[^\\]]*)\\]");
