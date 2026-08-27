@@ -65,7 +65,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.9.1 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.9.2 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -83,7 +83,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.9.1 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.9.2 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -848,8 +848,8 @@ public class TKAntiCheat : Plugin
                 catch { known = false; }
                 if (!known && config.crashGuard)
                 {
-                    HandleCrash(conn, msg, "commande inconnue (spoof / mod-menu)");
-                    return;
+                    HandleUnknownCmd(msg);
+                    return; // jetée sans alerte : souvent un plugin désynchronisé
                 }
                 // 2) payload bourré de NaN / Infinity = tentative de crash
                 //    « écran noir » (casse les matrices de collider). Jetée.
@@ -935,36 +935,101 @@ public class TKAntiCheat : Plugin
         return null;
     }
 
-    private readonly Dictionary<ulong, int> crashHits = new Dictionary<ulong, int>();
+    // Fenêtre glissante par joueur : 1 paquet NaN isolé = jeté en silence
+    // (les paquets de conduite en produisent parfois par hasard) ; on
+    // n'alerte qu'à partir de 3 paquets en 2 min (un vrai crasher en spamme
+    // des dizaines), et le kick optionnel ne part qu'à 5.
+    private readonly Dictionary<ulong, List<float>> crashTimes = new Dictionary<ulong, List<float>>();
     private readonly Dictionary<ulong, float> crashLastAlert = new Dictionary<ulong, float>();
+    private long crashQuietDropped;
+
+    private string ResolveCmdName(ushort hash)
+    {
+        try
+        {
+            Mirror.RemoteCalls.RemoteCallDelegate rd = cmdGetDelegate != null ? cmdGetDelegate(hash) : null;
+            if (rd != null && rd.Method != null)
+            {
+                string comp = rd.Method.DeclaringType != null ? rd.Method.DeclaringType.Name : "?";
+                string fn = rd.Method.Name.Replace("InvokeUserCode_", "");
+                int cut = fn.IndexOf("__", StringComparison.Ordinal);
+                if (cut > 0)
+                {
+                    fn = fn.Substring(0, cut);
+                }
+                return comp + "." + fn;
+            }
+        }
+        catch
+        {
+        }
+        return "commande [" + hash + "]";
+    }
 
     private void HandleCrash(NetworkConnectionToClient conn, CommandMessage msg, string why)
     {
         Player author = FindAuthor(conn);
         ulong sid = author != null ? author.steamId : 0;
+        float now = Time.realtimeSinceStartup;
+        List<float> times;
+        if (!crashTimes.TryGetValue(sid, out times))
+        {
+            times = new List<float>();
+            crashTimes[sid] = times;
+        }
+        times.Add(now);
+        times.RemoveAll(delegate (float t) { return now - t > 120f; });
+        int n = times.Count;
+        if (n < 3)
+        {
+            crashQuietDropped++;
+            return; // jeté en silence : pas assez récurrent pour accuser
+        }
         string pseudo = author != null ? SafePseudo(author) : ("connexion #" + conn.connectionId);
         if (string.IsNullOrEmpty(pseudo) || pseudo.Trim().Length == 0)
         {
             pseudo = "Joueur " + sid;
         }
-        int n;
-        crashHits.TryGetValue(sid, out n);
-        n++;
-        crashHits[sid] = n;
-        bool kick = config.crashGuardKick && author != null;
-        float now = Time.realtimeSinceStartup;
+        bool kick = config.crashGuardKick && author != null && n >= 5;
         float last;
         crashLastAlert.TryGetValue(sid, out last);
-        if (n == 1 || kick || now - last >= 20f)
+        if (now - last >= 30f || kick)
         {
             crashLastAlert[sid] = now;
             Alert("CRASH", pseudo, sid, "tentative de crash bloquée : " + why
-                + " — " + n + " paquet(s)" + (kick ? " — kick" : ""));
+                + " via " + ResolveCmdName(msg.functionHash)
+                + " — " + n + " paquet(s) en 2 min" + (kick ? " — kick" : ""));
         }
         if (kick)
         {
-            crashHits[sid] = 0;
+            times.Clear();
             try { author.Disconnect("Tentative de crash serveur (paquets malformés)"); } catch { }
+        }
+    }
+
+    // Commandes au hash inconnu : jetées en silence. Constat du 27/08 :
+    // 115 500 paquets du MÊME hash [46406] venaient d'un plugin FastDL
+    // client désynchronisé, pas d'une attaque -> aucune alerte, un simple
+    // compteur par hash loggé au plus 1 fois/min.
+    private readonly Dictionary<ushort, long> unknownCmdCounts = new Dictionary<ushort, long>();
+    private float unknownCmdLastLog;
+
+    private void HandleUnknownCmd(CommandMessage msg)
+    {
+        long n;
+        unknownCmdCounts.TryGetValue(msg.functionHash, out n);
+        unknownCmdCounts[msg.functionHash] = n + 1;
+        float now = Time.realtimeSinceStartup;
+        if (now - unknownCmdLastLog >= 60f)
+        {
+            unknownCmdLastLog = now;
+            StringBuilder sb = new StringBuilder("[TKAC] CrashGuard : commandes inconnues jetées —");
+            foreach (KeyValuePair<ushort, long> kv in unknownCmdCounts)
+            {
+                sb.Append(" [").Append(kv.Key).Append("]x").Append(kv.Value);
+            }
+            sb.Append(" (souvent un plugin client/serveur désynchronisé, ex. FastDL)");
+            Debug.Log(sb.ToString());
         }
     }
 
@@ -988,19 +1053,7 @@ public class TKAntiCheat : Plugin
         catch
         {
         }
-        string cmdName = "commande inconnue";
-        try
-        {
-            Mirror.RemoteCalls.RemoteCallDelegate rd = cmdGetDelegate != null ? cmdGetDelegate(msg.functionHash) : null;
-            if (rd != null && rd.Method != null)
-            {
-                string comp = rd.Method.DeclaringType != null ? rd.Method.DeclaringType.Name : "?";
-                cmdName = comp + "." + rd.Method.Name.Replace("InvokeUserCode_", "");
-            }
-        }
-        catch
-        {
-        }
+        string cmdName = ResolveCmdName(msg.functionHash);
         // ordres de synchro connus (désync bénigne) : compteur discret, ni
         // alerte ni sanction — seuls les VRAIS ordres suspects alertent.
         try
