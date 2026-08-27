@@ -1277,7 +1277,7 @@ function showTab(name){
   localStorage.setItem('tkweb_tab', name);
   if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3) loadPanelUsers(); }
   if(name === 'monde'){ loadPlugins(); if(myLevel() >= 3){ loadBackups(); loadBench(); } }
-  if(name === 'carte'){ initMap(); renderMapDots(); pollMapVehicles(); }
+  if(name === 'carte'){ initMap(); api('mapcalib').then(function(c){ if(!c.error){ mapCal = c; renderMapDots(); } }).catch(function(){}); renderMapDots(); pollMapVehicles(); }
   if(name === 'classement') loadRankings();
   if(name === 'securite'){ if(myLevel() >= 3){ loadAcConfig(); loadServerLog(); } markAlertsSeen(); }
   if(name === 'chat') chatScrollBottom();

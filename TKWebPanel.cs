@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.7 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.7.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -739,6 +739,8 @@ public class TKWebPanel : Plugin
             case "/api/areas":
             case "/api/bizs":
             case "/api/fps":       // GET seulement, le POST est filtré plus bas
+            case "/api/mapcalib":  // GET seulement, le POST (calibrer) est filtré plus bas
+            case "/api/mapvehicles":
             case "/api/ghoststats":
             case "/api/heavyareas":
             case "/api/floodbans":
@@ -794,6 +796,10 @@ public class TKWebPanel : Plugin
         if (path == "/api/fps" && ctx.Request.HttpMethod != "GET")
         {
             need = 2; // modifier les FPS = admin
+        }
+        if (path == "/api/mapcalib" && ctx.Request.HttpMethod != "GET")
+        {
+            need = 2; // calibrer la carte = admin
         }
         if (level < need)
         {
