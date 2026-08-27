@@ -66,7 +66,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.10.1 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.10.2 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -84,7 +84,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.10.1 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.10.2 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -873,7 +873,7 @@ public class TKAntiCheat : Plugin
                 catch { known = false; }
                 if (!known && config.crashGuard)
                 {
-                    HandleUnknownCmd(msg);
+                    HandleUnknownCmd(conn, msg);
                     return; // jetée sans alerte : souvent un plugin désynchronisé
                 }
                 // 2) payload bourré de NaN / Infinity = tentative de crash
@@ -1135,24 +1135,54 @@ public class TKAntiCheat : Plugin
     // 115 500 paquets du MÊME hash [46406] venaient d'un plugin FastDL
     // client désynchronisé, pas d'une attaque -> aucune alerte, un simple
     // compteur par hash loggé au plus 1 fois/min.
-    private readonly Dictionary<ushort, long> unknownCmdCounts = new Dictionary<ushort, long>();
+    private class UnknownCmdInfo
+    {
+        public long count;
+        public readonly HashSet<ulong> senders = new HashSet<ulong>();
+        public bool alerted;
+    }
+    private readonly Dictionary<ushort, UnknownCmdInfo> unknownCmds = new Dictionary<ushort, UnknownCmdInfo>();
     private float unknownCmdLastLog;
 
-    private void HandleUnknownCmd(CommandMessage msg)
+    private void HandleUnknownCmd(NetworkConnectionToClient conn, CommandMessage msg)
     {
-        long n;
-        unknownCmdCounts.TryGetValue(msg.functionHash, out n);
-        unknownCmdCounts[msg.functionHash] = n + 1;
+        UnknownCmdInfo info;
+        if (!unknownCmds.TryGetValue(msg.functionHash, out info))
+        {
+            info = new UnknownCmdInfo();
+            unknownCmds[msg.functionHash] = info;
+        }
+        info.count++;
+        Player author = FindAuthor(conn);
+        ulong sid = author != null ? author.steamId : 0;
+        if (sid != 0 && info.senders.Count < 16)
+        {
+            info.senders.Add(sid);
+        }
+        // Signature d'un MOD CLIENT injecté (MelonLoader) : un hash inconnu
+        // envoyé de façon répétée par 1-2 joueurs SEULEMENT. Un plugin
+        // client/serveur désynchronisé (ex. FastDL) est au contraire émis
+        // par presque tous les joueurs -> jamais d'alerte. On attend 10 min
+        // de fonctionnement et 20 occurrences pour trancher sereinement.
         float now = Time.realtimeSinceStartup;
+        if (!info.alerted && now > 600f && info.count >= 20
+            && info.senders.Count > 0 && info.senders.Count <= 2 && author != null)
+        {
+            info.alerted = true;
+            Alert("MOD-CLIENT", SafePseudo(author), sid,
+                "commande client inconnue [" + msg.functionHash + "] envoyée " + info.count
+                + " fois par " + info.senders.Count + " joueur(s) seulement — mod client injecté (MelonLoader ?) très probable");
+        }
         if (now - unknownCmdLastLog >= 60f)
         {
             unknownCmdLastLog = now;
             StringBuilder sb = new StringBuilder("[TKAC] CrashGuard : commandes inconnues jetées —");
-            foreach (KeyValuePair<ushort, long> kv in unknownCmdCounts)
+            foreach (KeyValuePair<ushort, UnknownCmdInfo> kv in unknownCmds)
             {
-                sb.Append(" [").Append(kv.Key).Append("]x").Append(kv.Value);
+                sb.Append(" [").Append(kv.Key).Append("]x").Append(kv.Value.count)
+                  .Append("(").Append(kv.Value.senders.Count).Append(" émetteurs)");
             }
-            sb.Append(" (souvent un plugin client/serveur désynchronisé, ex. FastDL)");
+            sb.Append(" — beaucoup d'émetteurs = plugin désynchronisé (FastDL), 1-2 = mod client");
             Debug.Log(sb.ToString());
         }
     }
