@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=83
-Meta.ReleaseNotes=TKAntiFlood v1.4 + panel v3.10.1 : date-heure et motif de chaque ban IP (flood de connexions, paquets malformes, ban manuel), tries du plus recent, IP cliquable vers le journal d identites.
+Meta.ConfigVersion=84
+Meta.ReleaseNotes=TKAntiCheat v1.9 CrashGuard : jette en amont les commandes spoofees (hash inconnu = Found no receiver) et les payloads NaN-Infinity qui provoquent les ecrans noirs - le crash est neutralise sans kicker. Panel v3.10.2 : toggles CrashGuard.
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]

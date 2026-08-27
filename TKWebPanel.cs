@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.10.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.10.2 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -3628,6 +3628,8 @@ public class TKWebPanel : Plugin
             sb.Append(",\"spamKick\":").Append(Json.GetBool(json, "spamKick", true) ? "true" : "false");
             sb.Append(",\"menuShield\":").Append(Json.GetBool(json, "menuShield", true) ? "true" : "false");
             sb.Append(",\"menuShieldKick\":").Append(Json.GetBool(json, "menuShieldKick", false) ? "true" : "false");
+            sb.Append(",\"crashGuard\":").Append(Json.GetBool(json, "crashGuard", true) ? "true" : "false");
+            sb.Append(",\"crashGuardKick\":").Append(Json.GetBool(json, "crashGuardKick", false) ? "true" : "false");
             sb.Append(",\"enabled\":").Append(Json.GetBool(json, "enabled", true) ? "true" : "false");
             sb.Append(",\"moneyThreshold\":").Append(Json.GetInt(json, "moneyAlertThreshold", 500000));
             sb.Append(",\"maxSpeed\":").Append(Json.GetInt(json, "maxSpeed", 30));
@@ -3646,7 +3648,7 @@ public class TKWebPanel : Plugin
     {
         string key = Json.GetString(body, "key", "");
         bool value = Json.GetBool(body, "value", false);
-        string[] allowed = { "adminProtection", "adminAutoReset", "adminKick", "spamEnabled", "spamKick", "enabled", "spoofCheck", "spoofKick", "adminIpGuard", "adminIpKick", "menuShield", "menuShieldKick" };
+        string[] allowed = { "adminProtection", "adminAutoReset", "adminKick", "spamEnabled", "spamKick", "enabled", "spoofCheck", "spoofKick", "adminIpGuard", "adminIpKick", "menuShield", "menuShieldKick", "crashGuard", "crashGuardKick" };
         if (Array.IndexOf(allowed, key) < 0)
         {
             return "{\"error\":\"réglage inconnu\"}";

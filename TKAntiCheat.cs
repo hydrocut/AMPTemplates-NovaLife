@@ -65,7 +65,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.8.1 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.9 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -83,7 +83,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.8.1 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.9 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -825,7 +825,7 @@ public class TKAntiCheat : Plugin
             }
             NetworkServer.ReplaceHandler<CommandMessage>(OnCommandGuard, true);
             menuShieldInstalled = true;
-            Debug.Log("[TKAC] MenuShield actif — les ordres réseau sans autorité sont attribués à leur auteur");
+            Debug.Log("[TKAC] MenuShield + CrashGuard actifs — commandes spoofées et payloads NaN jetés, ordres sans autorité attribués");
         }
         catch (Exception ex)
         {
@@ -838,15 +838,37 @@ public class TKAntiCheat : Plugin
     {
         try
         {
-            if (config != null && config.menuShield && conn != null
-                && cmdRequiresAuth != null && cmdRequiresAuth(msg.functionHash))
+            if (config != null && config.menuShield && conn != null)
             {
-                NetworkIdentity target;
-                if (NetworkServer.spawned.TryGetValue(msg.netId, out target)
-                    && target != null && target.connectionToClient != conn)
+                // 1) hash de commande inconnu du serveur = commande spoofée
+                //    (mod-menu / crasher). C'est le « Found no receiver for
+                //    incoming Command » qui inonde la console. On la JETTE.
+                bool known = false;
+                try { known = cmdGetDelegate != null && cmdGetDelegate(msg.functionHash) != null; }
+                catch { known = false; }
+                if (!known && config.crashGuard)
                 {
-                    HandleMenuViolation(conn, msg, target);
-                    return; // ordre illégitime : non transmis
+                    HandleCrash(conn, msg, "commande inconnue (spoof / mod-menu)");
+                    return;
+                }
+                // 2) payload bourré de NaN / Infinity = tentative de crash
+                //    « écran noir » (casse les matrices de collider). Jetée.
+                if (config.crashGuard && PayloadNaNCount(msg.payload) >= 4)
+                {
+                    HandleCrash(conn, msg, "valeurs NaN/Infinity (crash écran noir)");
+                    return;
+                }
+                // 3) ordre sur un objet non possédé = mod-menu « classique »
+                //    (hors ordres de synchro à haute fréquence, cf. ignore).
+                if (cmdRequiresAuth != null && cmdRequiresAuth(msg.functionHash))
+                {
+                    NetworkIdentity target;
+                    if (NetworkServer.spawned.TryGetValue(msg.netId, out target)
+                        && target != null && target.connectionToClient != conn)
+                    {
+                        HandleMenuViolation(conn, msg, target);
+                        return; // ordre illégitime : non transmis
+                    }
                 }
             }
         }
@@ -862,6 +884,84 @@ public class TKAntiCheat : Plugin
         }
         catch
         {
+        }
+    }
+
+    // Compte les fenêtres de 4 octets interprétables comme un flottant NaN ou
+    // Infinity dans le payload. Un vrai vecteur/quaternion NaN en produit
+    // plusieurs ; on exige un seuil (>=4) pour zéro faux positif sur du
+    // trafic légitime (aucune valeur de jeu normale n'est NaN/Infinity).
+    private static int PayloadNaNCount(ArraySegment<byte> seg)
+    {
+        byte[] a = seg.Array;
+        if (a == null || seg.Count < 4 || seg.Count > 8192)
+        {
+            return 0;
+        }
+        int off = seg.Offset, end = seg.Offset + seg.Count - 4, bad = 0;
+        for (int i = off; i <= end; i++)
+        {
+            float f = BitConverter.ToSingle(a, i);
+            if (float.IsNaN(f) || float.IsInfinity(f))
+            {
+                bad++;
+                if (bad >= 4)
+                {
+                    return bad;
+                }
+            }
+        }
+        return bad;
+    }
+
+    private Player FindAuthor(NetworkConnectionToClient conn)
+    {
+        try
+        {
+            foreach (Player p in Nova.server.GetAllPlayers())
+            {
+                if (p != null && ReferenceEquals(p.conn, conn))
+                {
+                    return p;
+                }
+            }
+        }
+        catch
+        {
+        }
+        return null;
+    }
+
+    private readonly Dictionary<ulong, int> crashHits = new Dictionary<ulong, int>();
+    private readonly Dictionary<ulong, float> crashLastAlert = new Dictionary<ulong, float>();
+
+    private void HandleCrash(NetworkConnectionToClient conn, CommandMessage msg, string why)
+    {
+        Player author = FindAuthor(conn);
+        ulong sid = author != null ? author.steamId : 0;
+        string pseudo = author != null ? SafePseudo(author) : ("connexion #" + conn.connectionId);
+        if (string.IsNullOrEmpty(pseudo) || pseudo.Trim().Length == 0)
+        {
+            pseudo = "Joueur " + sid;
+        }
+        int n;
+        crashHits.TryGetValue(sid, out n);
+        n++;
+        crashHits[sid] = n;
+        bool kick = config.crashGuardKick && author != null;
+        float now = Time.realtimeSinceStartup;
+        float last;
+        crashLastAlert.TryGetValue(sid, out last);
+        if (n == 1 || kick || now - last >= 20f)
+        {
+            crashLastAlert[sid] = now;
+            Alert("CRASH", pseudo, sid, "tentative de crash bloquée : " + why
+                + " — " + n + " paquet(s)" + (kick ? " — kick" : ""));
+        }
+        if (kick)
+        {
+            crashHits[sid] = 0;
+            try { author.Disconnect("Tentative de crash serveur (paquets malformés)"); } catch { }
         }
     }
 
@@ -1125,6 +1225,10 @@ public class TKAntiCheatConfig
     // légitimement sur un véhicule qui n'est plus « à lui » — ce n'est pas
     // un mod menu. Comptés à part, jamais alertés ni sanctionnés.
     public string menuShieldIgnore = "CmdSendInputs";
+    // CrashGuard : jette les commandes spoofées (hash inconnu) et les payloads
+    // NaN/Infinity qui provoquent les écrans noirs. Actif par défaut.
+    public bool crashGuard = true;
+    public bool crashGuardKick = false;
     // Raisons de gain d'argent considérées légitimes (sous-chaînes, minuscule)
     public string[] reasonWhitelist = new string[]
     {
@@ -1162,6 +1266,8 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"menuShield\": " + (c.menuShield ? "true" : "false") + ",");
         sb.AppendLine("  \"menuShieldKick\": " + (c.menuShieldKick ? "true" : "false") + ",");
         sb.AppendLine("  \"menuShieldThreshold\": " + c.menuShieldThreshold + ",");
+        sb.AppendLine("  \"crashGuard\": " + (c.crashGuard ? "true" : "false") + ",");
+        sb.AppendLine("  \"crashGuardKick\": " + (c.crashGuardKick ? "true" : "false") + ",");
         sb.AppendLine("  \"menuShieldIgnore\": \"" + (c.menuShieldIgnore ?? "").Replace("\\", "").Replace("\"", "") + "\",");
         sb.Append("  \"reasonWhitelist\": [");
         for (int i = 0; i < c.reasonWhitelist.Length; i++)
@@ -1211,6 +1317,8 @@ public class TKAntiCheatConfig
         c.menuShieldKick = GetBool(json, "menuShieldKick", c.menuShieldKick);
         c.menuShieldThreshold = (int)GetDouble(json, "menuShieldThreshold", c.menuShieldThreshold);
         if (c.menuShieldThreshold < 1) c.menuShieldThreshold = 1;
+        c.crashGuard = GetBool(json, "crashGuard", c.crashGuard);
+        c.crashGuardKick = GetBool(json, "crashGuardKick", c.crashGuardKick);
         Match msi = Regex.Match(json, @"""menuShieldIgnore""\s*:\s*""(?<v>[^""]*)""");
         if (msi.Success) c.menuShieldIgnore = msi.Groups["v"].Value;
         if (c.spamThreshold < 5) c.spamThreshold = 5;
