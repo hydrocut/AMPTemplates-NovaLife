@@ -10,7 +10,7 @@ using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
-/// TKDynamicFps v1.2 — TeamKit.fr
+/// TKDynamicFps v1.3 — TeamKit.fr
 ///
 /// Framerate serveur adaptatif pour Nova-Life : réduit la consommation CPU
 /// quand le serveur est vide ou chargé, sans toucher au confort des joueurs.
@@ -42,9 +42,10 @@ public class TKDynamicFps : Plugin
     {
         base.OnPluginInit();
         LoadConfig();
+        ApplyPhysicsTuning();
         if (!config.enabled)
         {
-            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.2 désactivé par config (réactivable depuis le panel)");
+            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.3 désactivé par config (réactivable depuis le panel)");
         }
         try
         {
@@ -53,7 +54,7 @@ public class TKDynamicFps : Plugin
             TKDynamicFpsTicker ticker = go.AddComponent<TKDynamicFpsTicker>();
             ticker.config = config;
             ticker.plugin = this;
-            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.2 initialisé (idle "
+            Debug.Log("[TKFPS] Plugin TKDynamicFps v1.3 initialisé (idle "
                 + config.idleFps + " / base " + config.minPlayersFps + " / max " + config.maxFps
                 + " FPS, seuils CPU " + config.cpuLowPercent + "-" + config.cpuHighPercent
                 + "% sur " + config.allocatedCores + " cœurs)");
@@ -68,6 +69,41 @@ public class TKDynamicFps : Plugin
     private string lastConfigJson;
 
     // Relit config.json s'il a changé (modifié depuis le panel web) — à chaud.
+    // Applique les réglages physiques (thread principal). Réversible : on
+    // mémorise les valeurs d'origine d'Unity au premier passage.
+    private static float originalFixedDelta = -1f;
+    private static int originalSolverIter = -1;
+
+    public void ApplyPhysicsTuning()
+    {
+        try
+        {
+            if (originalFixedDelta < 0f)
+            {
+                originalFixedDelta = Time.fixedDeltaTime;
+                originalSolverIter = Physics.defaultSolverIterations;
+            }
+            float wantDelta = config.physicsHz > 0 ? 1f / config.physicsHz : originalFixedDelta;
+            if (Mathf.Abs(Time.fixedDeltaTime - wantDelta) > 0.0001f)
+            {
+                Time.fixedDeltaTime = wantDelta;
+                Time.maximumDeltaTime = Mathf.Max(0.1f, wantDelta * 4f);
+                Debug.Log("[TKFPS] Physique : " + (config.physicsHz > 0 ? config.physicsHz + " Hz" : "défaut Unity (" + (1f / originalFixedDelta).ToString("0") + " Hz)")
+                    + " (fixedDeltaTime=" + Time.fixedDeltaTime.ToString("0.####") + ")");
+            }
+            int wantIter = config.solverIterations > 0 ? config.solverIterations : originalSolverIter;
+            if (Physics.defaultSolverIterations != wantIter)
+            {
+                Physics.defaultSolverIterations = wantIter;
+                Debug.Log("[TKFPS] Solveur physique : " + wantIter + " itérations");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[TKFPS] Réglage physique impossible : " + ex.Message);
+        }
+    }
+
     public void ReloadConfig()
     {
         try
@@ -93,6 +129,9 @@ public class TKDynamicFps : Plugin
             config.intervalSeconds = c.intervalSeconds;
             config.stepFps = c.stepFps;
             config.logChanges = c.logChanges;
+            config.physicsHz = c.physicsHz;
+            config.solverIterations = c.solverIterations;
+            ApplyPhysicsTuning();
             Debug.Log("[TKFPS] Config rechargée (panel) : actif=" + config.enabled
                 + ", idle " + config.idleFps + " / base " + config.minPlayersFps + " / max " + config.maxFps
                 + " FPS, CPU " + config.cpuLowPercent + "-" + config.cpuHighPercent + "%");
@@ -335,6 +374,13 @@ public class TKDynamicFpsConfig
     // Pas d'ajustement par cycle
     public int stepFps = 5;
     public bool logChanges = true;
+    // Taux de la simulation physique (Hz). Unity = 50 par défaut ; 40 allège
+    // le thread principal de ~20 % de physique sans effet visible en jeu
+    // (les véhicules sont pilotés par les clients). 0 = ne pas toucher.
+    public int physicsHz = 40;
+    // Itérations du solveur de contacts (Unity = 6). 4 = moins de CPU par
+    // pas de physique, précision toujours suffisante côté serveur. 0 = off.
+    public int solverIterations = 4;
 
     public static string ToJson(TKDynamicFpsConfig c)
     {
@@ -349,6 +395,8 @@ public class TKDynamicFpsConfig
         sb.AppendLine("  \"allocatedCores\": " + c.allocatedCores + ",");
         sb.AppendLine("  \"intervalSeconds\": " + c.intervalSeconds + ",");
         sb.AppendLine("  \"stepFps\": " + c.stepFps + ",");
+        sb.AppendLine("  \"physicsHz\": " + c.physicsHz + ",");
+        sb.AppendLine("  \"solverIterations\": " + c.solverIterations + ",");
         sb.AppendLine("  \"logChanges\": " + (c.logChanges ? "true" : "false"));
         sb.AppendLine("}");
         return sb.ToString();
@@ -370,6 +418,12 @@ public class TKDynamicFpsConfig
         c.allocatedCores = GetInt(json, "allocatedCores", c.allocatedCores);
         c.intervalSeconds = GetInt(json, "intervalSeconds", c.intervalSeconds);
         c.stepFps = GetInt(json, "stepFps", c.stepFps);
+        c.physicsHz = GetInt(json, "physicsHz", c.physicsHz);
+        if (c.physicsHz != 0 && c.physicsHz < 20) c.physicsHz = 20;
+        if (c.physicsHz > 50) c.physicsHz = 50;
+        c.solverIterations = GetInt(json, "solverIterations", c.solverIterations);
+        if (c.solverIterations != 0 && c.solverIterations < 2) c.solverIterations = 2;
+        if (c.solverIterations > 10) c.solverIterations = 10;
         c.logChanges = GetBool(json, "logChanges", c.logChanges);
 
         // Garde-fous
