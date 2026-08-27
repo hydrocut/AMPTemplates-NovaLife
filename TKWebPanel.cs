@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.13.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.14 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -4851,9 +4851,30 @@ public class TKWebPanel : Plugin
                 + ",\"reason\":" + Json.Str(kv.Value.reason)
                 + ",\"ips\":[" + string.Join(",", ipsj.ToArray()) + "]}");
         }
+        // IP connues comme VPN/proxy (cache de TKAntiCheat) pour les marquer
+        List<string> vpnIps = new List<string>();
+        try
+        {
+            string vf = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiCheat"), "vpncache.tsv");
+            if (File.Exists(vf))
+            {
+                foreach (string line in File.ReadAllLines(vf))
+                {
+                    string[] pr = line.Split('\t');
+                    if (pr.Length >= 2 && pr[1] == "1")
+                    {
+                        vpnIps.Add(Json.Str(pr[0]));
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
         return "{\"shared\":[" + string.Join(",", shared.ToArray())
             + "],\"multi\":[" + string.Join(",", multi.ToArray())
-            + "],\"bannedSeen\":[" + string.Join(",", seen.ToArray()) + "]}";
+            + "],\"bannedSeen\":[" + string.Join(",", seen.ToArray())
+            + "],\"vpnIps\":[" + string.Join(",", vpnIps.ToArray()) + "]}";
     }
 
     private class BanRow

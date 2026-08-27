@@ -140,7 +140,7 @@ input:focus{outline:none;border-color:var(--accent)}
 .pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
 .plugitem{display:flex;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
 .plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.slink{color:var(--accent);text-decoration:none;border-bottom:1px dotted rgba(88,166,255,.5);cursor:pointer}.slink:hover{border-bottom-style:solid}.morebtn{width:100%;text-align:center;padding:9px;font-size:12px}#mapwrap{position:relative;height:calc(100vh - 150px);min-height:420px;overflow:hidden;background:#e9e9e7;border:1px solid var(--border);border-radius:10px;cursor:grab;touch-action:none}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.slink{color:var(--accent);text-decoration:none;border-bottom:1px dotted rgba(88,166,255,.5);cursor:pointer}.slink:hover{border-bottom-style:solid}.morebtn{width:100%;text-align:center;padding:9px;font-size:12px}.srow{display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 12px;padding:8px 12px;background:var(--panel2,#161b22);border-radius:8px}.scount{font-size:13px;font-weight:600}.scard{margin:8px 0;padding:10px 12px;border-radius:9px;background:var(--panel2,#161b22);border-left:3px solid var(--line,#2a3142)}.scard.danger{border-left-color:#ff5c5c;background:#ff5c5c0f}.scard.warn{border-left-color:#e3b341;background:#e3b3410d}.scard.info{border-left-color:#58a6ff;background:#58a6ff0d}.schead{font-size:13px;font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sacc{font-size:13px;margin:3px 0;line-height:1.7}.ipl{font-size:12.5px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}.vpnb{display:inline-block;font-size:10px;font-weight:700;color:#ff7b72;background:#ff5c5c22;padding:1px 5px;border-radius:5px;vertical-align:middle}.sban{margin-left:auto;font-size:11px;padding:3px 10px;background:#ff5c5c1f;color:#ff7b72;border:1px solid #ff5c5c44;border-radius:6px;cursor:pointer}.sban:hover{background:#ff5c5c33}#mapwrap{position:relative;height:calc(100vh - 150px);min-height:420px;overflow:hidden;background:#e9e9e7;border:1px solid var(--border);border-radius:10px;cursor:grab;touch-action:none}
 #mapwrap.grabbing{cursor:grabbing}
 #mapinner{position:absolute;transform-origin:0 0;width:3500px;height:3500px}
 #mapimg{width:3500px;height:3500px;display:block;user-select:none;pointer-events:none}
@@ -1086,41 +1086,64 @@ function notifyAreaOwner(areaId){
 }
 
 var slogTimer = null;
+var suspVpnSet = {};
+function ipChip(ip){
+  var vpn = suspVpnSet[ip] ? ' <span class="vpnb" title="IP VPN/proxy/datacenter détectée">VPN</span>' : '';
+  return '<a href="#" class="ipl mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>' + vpn;
+}
+function suspBanBtn(ip){
+  return '<button class="sban" title="Bannir cette IP au niveau réseau" onclick="if(confirm(\'Bannir l’IP ' + esc(ip) + ' ? Tous les comptes derrière seront bloqués.\'))banIpFromJournal(\'' + esc(ip) + '\')">Bannir</button>';
+}
 function loadSuspects(){
   api('suspects').then(function(r){
     var b = document.getElementById('suspects');
     if(!b) return;
     if(r.error){ b.innerHTML = '<span class="muted">' + esc(r.error) + '</span>'; return; }
-    var h2 = '';
+    suspVpnSet = {};
+    (r.vpnIps || []).forEach(function(ip){ suspVpnSet[ip] = 1; });
     var ev = (r.shared || []).filter(function(x){ return x.evasion; });
     var sh = (r.shared || []).filter(function(x){ return !x.evasion; });
-    if(ev.length){
-      h2 += '<h3 style="font-size:13px;color:#ff7b72;margin:6px 0 4px">🚨 Évasion de ban probable</h3>';
-      h2 += ev.map(function(x){
-        return '<div style="margin:4px 0;padding:8px;border:1px solid #ff7b7244;border-radius:8px">IP <a href="#" class="slink mono" onclick="openIdentityIp(\'' + esc(x.ip) + '\');return false">' + esc(x.ip) + '</a> partagée par : ' +
-          x.accounts.map(function(a){ return slinkSteam(a.sid, a.name) + (a.banned ? ' <span class="badge" style="background:#ff7b7222;color:#ff7b72">BANNI · ' + esc(a.reason || '?') + '</span>' : ' <span class="badge" style="background:#3fb95022;color:#3fb950">actif</span>'); }).join(' · ') + '</div>';
+    var multi = r.multi || [], bs = r.bannedSeen || [];
+    // barre de synthèse
+    var chips = [];
+    if(ev.length) chips.push('<span class="scount" style="color:#ff5c5c">🚨 ' + ev.length + ' évasion' + (ev.length>1?'s':'') + '</span>');
+    if(sh.length) chips.push('<span class="scount" style="color:#e3b341">👥 ' + sh.length + ' IP partagée' + (sh.length>1?'s':'') + '</span>');
+    if(multi.length) chips.push('<span class="scount" style="color:#58a6ff">🌐 ' + multi.length + ' multi-IP</span>');
+    if(bs.length) chips.push('<span class="scount muted">🚫 ' + bs.length + ' banni' + (bs.length>1?'s':'') + '</span>');
+    var out = chips.length ? '<div class="srow">' + chips.join('') + '</div>' : '';
+
+    // 1) Évasion de ban — cartes rouges
+    ev.forEach(function(x){
+      var accs = x.accounts.map(function(a){
+        var tag = a.banned
+          ? '<span class="badge" style="background:#ff5c5c22;color:#ff7b72">BANNI · ' + esc(a.reason||'?') + '</span>'
+          : '<span class="badge" style="background:#3fb95022;color:#3fb950">actif</span>';
+        return '<div class="sacc">' + slinkSteam(a.sid, a.name) + ' ' + tag + '</div>';
       }).join('');
+      out += '<div class="scard danger"><div class="schead">🚨 Évasion de ban probable — ' + ipChip(x.ip) + suspBanBtn(x.ip) + '</div>' + accs + '</div>';
+    });
+
+    // 2) IP partagées — cartes ambre compactes
+    sh.forEach(function(x){
+      out += '<div class="scard warn"><div class="schead">👥 ' + ipChip(x.ip) + ' <span class="muted" style="font-weight:400;font-size:12px">' + x.accounts.length + ' comptes</span>' + suspBanBtn(x.ip) + '</div>' +
+        '<div class="sacc">' + x.accounts.map(function(a){ return slinkSteam(a.sid, a.name); }).join(' &nbsp;·&nbsp; ') + '</div></div>';
+    });
+
+    // 3) Comptes multi-IP
+    multi.forEach(function(x){
+      var nv = x.ips.filter(function(ip){ return suspVpnSet[ip]; }).length;
+      var meta = x.ips.length + ' IP' + (nv>0 ? ' · <span style="color:#ff7b72">' + nv + ' VPN</span>' : '');
+      out += '<div class="scard info"><div class="schead">🌐 ' + slinkSteam(x.sid, x.name) + (x.banned ? ' <span class="badge" style="background:#ff5c5c22;color:#ff7b72">BANNI</span>' : '') + ' <span class="muted" style="font-weight:400;font-size:12px">' + meta + '</span></div>' +
+        '<div class="sacc">' + x.ips.slice(0,8).map(ipChip).join(' &nbsp; ') + '</div></div>';
+    });
+
+    // 4) Bannis vus
+    if(bs.length){
+      out += '<div class="scard"><div class="schead">🚫 Bannis vus au journal <span class="muted" style="font-weight:400;font-size:12px">IP à surveiller</span></div>' +
+        bs.map(function(x){ return '<div class="sacc">' + slinkSteam(x.sid, x.name) + ' <span class="muted" style="font-size:12px">[' + esc(x.reason||'?') + ']</span> &nbsp; ' + x.ips.map(ipChip).join(' &nbsp; ') + '</div>'; }).join('') + '</div>';
     }
-    if(sh.length){
-      h2 += '<h3 style="font-size:13px;margin:10px 0 4px">👥 IP partagées (alts possibles — ou simple famille/coloc)</h3>';
-      h2 += sh.map(function(x){
-        return '<div style="margin:3px 0">IP <a href="#" class="slink mono" onclick="openIdentityIp(\'' + esc(x.ip) + '\');return false">' + esc(x.ip) + '</a> : ' +
-          x.accounts.map(function(a){ return slinkSteam(a.sid, a.name); }).join(' · ') + '</div>';
-      }).join('');
-    }
-    if((r.multi || []).length){
-      h2 += '<h3 style="font-size:13px;margin:10px 0 4px">🌐 Comptes à 3+ IP (partage de compte / VPN)</h3>';
-      h2 += r.multi.map(function(x){
-        return '<div style="margin:3px 0">' + slinkSteam(x.sid, x.name) + (x.banned ? ' <span class="badge" style="background:#ff7b7222;color:#ff7b72">BANNI</span>' : '') + ' : ' + x.ips.length + ' IP — ' + x.ips.slice(0, 6).map(function(ip){ return '<a href="#" class="slink mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>'; }).join(', ') + '</div>';
-      }).join('');
-    }
-    if((r.bannedSeen || []).length){
-      h2 += '<h3 style="font-size:13px;margin:10px 0 4px">🚫 Bannis vus au journal — leurs IP à surveiller</h3>';
-      h2 += r.bannedSeen.map(function(x){
-        return '<div style="margin:3px 0">' + slinkSteam(x.sid, x.name) + ' <span class="muted" style="font-size:12px">[' + esc(x.reason || '?') + ']</span> : ' + x.ips.map(function(ip){ return '<a href="#" class="slink mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>'; }).join(', ') + '</div>';
-      }).join('');
-    }
-    b.innerHTML = h2 || '<span class="muted">Rien de suspect pour le moment 👌</span>';
+
+    b.innerHTML = out || '<div class="scard" style="text-align:center;color:#3fb950">Rien de suspect pour le moment 👌</div>';
   }).catch(function(){});
 }
 function loadServerLog(){
