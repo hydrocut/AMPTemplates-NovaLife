@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.7.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.8 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -4897,21 +4897,29 @@ public class TKWebPanel : Plugin
 
     private string ApiMapCalibSet(string body)
     {
-        double sx = Json.GetDouble(body, "sx", 0);
-        double sy = Json.GetDouble(body, "sy", 0);
-        double ox2 = Json.GetDouble(body, "ox", 0);
-        double oy2 = Json.GetDouble(body, "oy", 0);
-        if (sx == 0 || sy == 0 || Math.Abs(sx) > 50 || Math.Abs(sy) > 50)
+        // Transformation affine complète (v3.8) : gère une carte pivotée ou
+        // en miroir, ce que l'ancien modèle sx/sy « axes alignés » ne pouvait
+        // pas. mapX = a*wx + b*wz + c ; mapY = d*wx + e*wz + f.
+        double a = Json.GetDouble(body, "a", 0);
+        double b = Json.GetDouble(body, "b", 0);
+        double c = Json.GetDouble(body, "c", 0);
+        double d = Json.GetDouble(body, "d", 0);
+        double e = Json.GetDouble(body, "e", 0);
+        double f = Json.GetDouble(body, "f", 0);
+        double m1 = Math.Sqrt(a * a + b * b);
+        double m2 = Math.Sqrt(d * d + e * e);
+        if (m1 < 0.01 || m1 > 50 || m2 < 0.01 || m2 > 50)
         {
-            return "{\"error\":\"calibrage invalide\"}";
+            return "{\"error\":\"calibrage invalide (points trop proches ou alignés ?)\"}";
         }
         try
         {
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             File.WriteAllText(MapCalibPath(),
-                "{\"sx\":" + sx.ToString("0.######", ci) + ",\"sy\":" + sy.ToString("0.######", ci)
-                + ",\"ox\":" + ox2.ToString("0.##", ci) + ",\"oy\":" + oy2.ToString("0.##", ci) + "}");
-            StaffLog("calibre la carte (sx=" + sx.ToString("0.####", ci) + ")");
+                "{\"a\":" + a.ToString("0.######", ci) + ",\"b\":" + b.ToString("0.######", ci)
+                + ",\"c\":" + c.ToString("0.##", ci) + ",\"d\":" + d.ToString("0.######", ci)
+                + ",\"e\":" + e.ToString("0.######", ci) + ",\"f\":" + f.ToString("0.##", ci) + "}");
+            StaffLog("calibre la carte (3 points, échelle " + m1.ToString("0.###", ci) + " px/m)");
             return "{\"ok\":true}";
         }
         catch (Exception ex)

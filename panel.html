@@ -364,7 +364,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
         <button onclick="mapReset()" title="Recentrer">⌂</button>
         <button id="tgP" class="tgon" onclick="mapTogglePlayers()" title="Joueurs">👤</button>
         <button id="tgV" class="tgon" onclick="mapToggleVehicles()" title="Véhicules">🚗</button>
-        <button class="need-admin" id="calbtn" onclick="calStart()" title="Calibrer la carte en 2 points">🎯</button>
+        <button class="need-admin" id="calbtn" onclick="calStart()" title="Calibrer la carte en 3 points">🎯</button>
       </div>
       <div id="calbox" style="display:none"></div>
     </div>
@@ -2171,8 +2171,10 @@ function mapZoom(f){
   mapScale *= f; mapApply();
 }
 function worldToMap(x, z){
-  var c = mapCal || {sx:0.45, sy:-0.45, ox:1626, oy:1357};
-  return [x * c.sx + c.ox, z * c.sy + c.oy];
+  var c = mapCal;
+  if(c && c.a !== undefined){ return [c.a * x + c.b * z + c.c, c.d * x + c.e * z + c.f]; }
+  var k = (c && c.sx !== undefined) ? c : {sx:0.45, sy:-0.45, ox:1626, oy:1357};
+  return [x * k.sx + k.ox, z * k.sy + k.oy];
 }
 var mapVeh = [], showP = true, showV = true;
 function mapTogglePlayers(){ showP = !showP; document.getElementById('tgP').classList.toggle('tgon', showP); renderMapDots(); }
@@ -2254,7 +2256,7 @@ function initMap(){
 function calStart(){
   if(!playersCache.length){ toast('Connecte-toi en jeu pour calibrer', true); return; }
   calState = 1; calPts = [];
-  calMsg('Étape 1/2 — va en jeu à un endroit reconnaissable (rond-point, croisement…), puis <b>clique ta position exacte sur la carte</b>. <button onclick="calCancel()">Annuler</button>');
+  calMsg('Étape 1/3 — va en jeu à un endroit reconnaissable (rond-point, croisement…), puis <b>clique ta position exacte sur la carte</b>. <button onclick="calCancel()">Annuler</button>');
 }
 function calMsg(html){
   var b = document.getElementById('calbox');
@@ -2271,24 +2273,38 @@ function calClick(e){
   var r = w.getBoundingClientRect();
   var mx = (e.clientX - r.left - mapTx) / mapScale;
   var my = (e.clientY - r.top - mapTy) / mapScale;
+  // refuse un point trop proche d'un point déjà pris (< 25 m dans le monde)
+  for(var i = 0; i < calPts.length; i++){
+    var dpx = pl.x - calPts[i].wx, dpz = pl.z - calPts[i].wz;
+    if(Math.sqrt(dpx * dpx + dpz * dpz) < 25){
+      calMsg('Tu es trop près du point ' + (i + 1) + ' — déplace-toi <b>plus loin en jeu</b> (25 m minimum), attends 5 s, puis reclique ta position. <button onclick="calCancel()">Annuler</button>');
+      return;
+    }
+  }
   calPts.push({wx: pl.x, wz: pl.z, px: mx, py: my});
-  if(calState === 1){
-    calState = 2;
-    calMsg('Étape 2/2 — déplace-toi <b>loin</b> (autre bout de la ville minimum), attends 5 s que ta position se rafraîchisse, puis clique à nouveau ta position sur la carte. <button onclick="calCancel()">Annuler</button>');
+  if(calPts.length < 3){
+    calState = calPts.length + 1;
+    calMsg('Étape ' + (calPts.length + 1) + '/3 — déplace-toi <b>loin</b> en jeu (et pas en ligne droite avec les points précédents), attends 5 s que ta position se rafraîchisse, puis clique à nouveau ta position sur la carte. <button onclick="calCancel()">Annuler</button>');
     return;
   }
-  var a = calPts[0], b = calPts[1];
-  if(Math.abs(b.wx - a.wx) < 30 || Math.abs(b.wz - a.wz) < 30){
-    calMsg('Les deux points sont trop proches (il faut au moins 30 m d\u2019\u00e9cart sur chaque axe). Recommence l\u2019\u00e9tape 2 en allant plus loin. <button onclick="calCancel()">Annuler</button>');
-    calState = 2; calPts.pop();
+  var p1 = calPts[0], p2 = calPts[1], p3 = calPts[2];
+  var dx2 = p2.wx - p1.wx, dz2 = p2.wz - p1.wz;
+  var dx3 = p3.wx - p1.wx, dz3 = p3.wz - p1.wz;
+  var det = dx2 * dz3 - dx3 * dz2;
+  if(Math.abs(det) < 900){
+    calMsg('Les 3 points sont presque <b>alignés</b> — refais le point 3 en allant clairement à côté de la ligne des deux premiers (ex. triangle). <button onclick="calCancel()">Annuler</button>');
+    calPts.pop(); calState = 3;
     return;
   }
-  var sx = (b.px - a.px) / (b.wx - a.wx);
-  var sy = (b.py - a.py) / (b.wz - a.wz);
-  var ox = a.px - sx * a.wx, oy = a.py - sy * a.wz;
-  api('mapcalib', {sx: sx, sy: sy, ox: ox, oy: oy}).then(function(r2){
+  function solve2(v2, v3){ return [(v2 * dz3 - v3 * dz2) / det, (dx2 * v3 - dx3 * v2) / det]; }
+  var AB = solve2(p2.px - p1.px, p3.px - p1.px);
+  var DE = solve2(p2.py - p1.py, p3.py - p1.py);
+  var A = AB[0], B = AB[1], Dv = DE[0], E = DE[1];
+  var C = p1.px - A * p1.wx - B * p1.wz;
+  var F = p1.py - Dv * p1.wx - E * p1.wz;
+  api('mapcalib', {a: A, b: B, c: C, d: Dv, e: E, f: F}).then(function(r2){
     if(r2.error){ toast(r2.error, true); return; }
-    mapCal = {sx: sx, sy: sy, ox: ox, oy: oy};
+    mapCal = {a: A, b: B, c: C, d: Dv, e: E, f: F};
     calCancel(); renderMapDots();
     toast('Carte calibrée ! Enregistré pour tout le monde sur ce serveur.');
   });
