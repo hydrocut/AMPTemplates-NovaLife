@@ -529,8 +529,8 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     <h2 style="margin-top:18px">Anti-flood — IP bannies (TKAntiFlood)</h2>
     <div class="tblwrap">
     <table>
-      <thead><tr><th>IP</th><th>Expiration</th><th></th></tr></thead>
-      <tbody id="floodbans"><tr><td colspan="3" class="muted">Chargement…</td></tr></tbody>
+      <thead><tr><th>IP</th><th>Banni le</th><th>Motif</th><th>Expiration</th><th></th></tr></thead>
+      <tbody id="floodbans"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
   </section>
@@ -907,10 +907,15 @@ function refresh(){
 
   api('floodbans').then(function(list){
     var tb = document.getElementById('floodbans');
-    if(list.length === 0){ tb.innerHTML = '<tr><td colspan="3" class="muted">Aucune IP bannie</td></tr>'; return; }
+    if(list.length === 0){ tb.innerHTML = '<tr><td colspan="5" class="muted">Aucune IP bannie</td></tr>'; return; }
+    list.sort(function(a, b2){ return (b2.bannedAt || 0) - (a.bannedAt || 0); });
     tb.innerHTML = list.map(function(b){
-      var exp = b.expiry == 0 ? 'Permanent' : new Date(b.expiry * 1000).toLocaleString('fr-FR');
-      return '<tr><td class="mono">' + esc(b.ip) + '</td><td>' + exp + '</td>' +
+      var exp = b.expiry == 0 ? '<b>Permanent</b>' : new Date(b.expiry * 1000).toLocaleString('fr-FR');
+      var at = b.bannedAt > 0 ? new Date(b.bannedAt * 1000).toLocaleString('fr-FR') : '<span class="muted">—</span>';
+      return '<tr><td class="mono clickable" onclick="openIdentityIp(\'' + esc(b.ip) + '\')" title="Voir les comptes liés à cette IP">' + esc(b.ip) + '</td>' +
+        '<td>' + at + '</td>' +
+        '<td style="font-size:12px">' + (b.reason ? esc(b.reason) : '<span class="muted">—</span>') + '</td>' +
+        '<td>' + exp + '</td>' +
         '<td><button onclick="floodUnban(\'' + esc(b.ip) + '\')">Retirer</button></td></tr>';
     }).join('');
   }).catch(function(){});

@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.10 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.10.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -4391,7 +4391,8 @@ public class TKWebPanel : Plugin
             string existing = File.Exists(f) ? File.ReadAllText(f) : "";
             if (!existing.Contains(ip + ";"))
             {
-                File.AppendAllText(f, (existing.Length > 0 && !existing.EndsWith("\n") ? "\n" : "") + ip + ";0\n");
+                File.AppendAllText(f, (existing.Length > 0 && !existing.EndsWith("\n") ? "\n" : "")
+                    + ip + ";0;" + NowUnix() + ";ban manuel depuis le panel\n");
             }
             StaffLog("bannit l'IP " + ip + " (" + steamId + ")");
             Debug.Log("[TKWEB] BANIP " + ip + " (" + steamId + ")");
@@ -5885,7 +5886,9 @@ public class TKWebPanel : Plugin
                     }
                     first = false;
                     sb.Append("{\"ip\":").Append(Json.Str(parts[0].Trim()));
-                    sb.Append(",\"expiry\":").Append(parts.Length > 1 ? parts[1].Trim() : "0").Append("}");
+                    sb.Append(",\"expiry\":").Append(parts.Length > 1 && parts[1].Trim().Length > 0 ? parts[1].Trim() : "0");
+                    sb.Append(",\"bannedAt\":").Append(parts.Length > 2 && parts[2].Trim().Length > 0 ? parts[2].Trim() : "0");
+                    sb.Append(",\"reason\":").Append(Json.Str(parts.Length > 3 ? parts[3].Trim() : "")).Append("}");
                 }
             }
         }

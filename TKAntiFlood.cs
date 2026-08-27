@@ -43,6 +43,8 @@ public class TKAntiFlood : Plugin
     private readonly Dictionary<string, List<double>> attempts = new Dictionary<string, List<double>>();
     // ip -> expiration du ban en secondes Unix (0 = permanent)
     private readonly Dictionary<string, double> banned = new Dictionary<string, double>();
+    // métadonnées des bans : ip -> [date_unix, motif] (affichées par le panel)
+    private readonly Dictionary<string, string[]> banMeta = new Dictionary<string, string[]>();
     // ip -> nombre de connexions bloquées depuis le ban (pour le log throttlé)
     private readonly Dictionary<string, long> blockedCount = new Dictionary<string, long>();
     // ip -> dernier log de blocage (pour throttler)
@@ -63,7 +65,7 @@ public class TKAntiFlood : Plugin
         LoadBans();
         HookTransport();
         HookLogGuard();
-        Debug.Log("[TKFLOOD] Plugin TKAntiFlood v1.3 initialisé (seuil "
+        Debug.Log("[TKFLOOD] Plugin TKAntiFlood v1.4 initialisé (seuil "
             + config.maxAttempts + " connexions / " + config.windowSeconds + "s, ban "
             + (config.banMinutes <= 0 ? "permanent" : config.banMinutes + " min") + ")");
     }
@@ -317,6 +319,7 @@ public class TKAntiFlood : Plugin
                     {
                         double expiry = config.banMinutes <= 0 ? 0 : now + config.banMinutes * 60.0;
                         banned[ip] = expiry;
+                        banMeta[ip] = new string[] { NowUnixAf().ToString(), "paquets malformés / attaque (" + count + " en " + config.packetWindowSeconds + " s)" };
                         packetHits.Remove(ip);
                         SaveBans();
                         doBan = true;
@@ -355,10 +358,16 @@ public class TKAntiFlood : Plugin
         }
     }
 
+    private static long NowUnixAf()
+    {
+        return (long)(DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+    }
+
     private void Ban(string ip, double now, int attemptCount)
     {
         double expiry = config.banMinutes <= 0 ? 0 : now + config.banMinutes * 60.0;
         banned[ip] = expiry;
+        banMeta[ip] = new string[] { NowUnixAf().ToString(), "flood de connexions (" + attemptCount + " en " + config.windowSeconds + " s)" };
         attempts.Remove(ip);
         SaveBans();
         Debug.Log("[TKFLOOD] BAN ip=" + ip + " attempts=" + attemptCount
@@ -439,6 +448,10 @@ public class TKAntiFlood : Plugin
                     continue; // expiré
                 }
                 banned[ip] = expiry;
+                if (parts.Length > 3)
+                {
+                    banMeta[ip] = new string[] { parts[2].Trim(), parts[3].Trim() };
+                }
                 loaded++;
             }
             if (loaded > 0)
@@ -457,11 +470,15 @@ public class TKAntiFlood : Plugin
         try
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("# TKAntiFlood — IP bannies (ip;expiration_unix, 0 = permanent)");
+            sb.AppendLine("# TKAntiFlood — IP bannies (ip;expiration_unix;banni_le_unix;motif — 0 = permanent)");
             sb.AppendLine("# Supprimer une ligne + redémarrer le serveur pour débannir.");
             foreach (KeyValuePair<string, double> kv in banned)
             {
-                sb.AppendLine(kv.Key + ";" + kv.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                string[] meta;
+                banMeta.TryGetValue(kv.Key, out meta);
+                sb.AppendLine(kv.Key + ";" + kv.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture)
+                    + ";" + (meta != null ? meta[0] : "")
+                    + ";" + (meta != null ? meta[1].Replace(';', ',') : ""));
             }
             File.WriteAllText(bannedFilePath, sb.ToString());
         }
