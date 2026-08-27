@@ -2179,6 +2179,8 @@ function initMap(){
   mapReset();
   var drag = null;
   w.addEventListener('pointerdown', function(e){
+    // boutons du HUD et du calibrage : toujours laisser le clic leur parvenir
+    if(e.target.closest && e.target.closest('#maphud,#calbox')) return;
     // clic sur une pastille (hors calibrage) : on laisse le clic lui parvenir
     if(!calState && e.target.closest && e.target.closest('.mdot,.mveh')) return;
     drag = {x:e.clientX, y:e.clientY, tx:mapTx, ty:mapTy, moved:false};
