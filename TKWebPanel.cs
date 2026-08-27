@@ -329,7 +329,7 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.3 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -740,6 +740,7 @@ public class TKWebPanel : Plugin
             case "/api/heavyareas":
             case "/api/floodbans":
             case "/api/acdismissed":
+            case "/api/rankings":
             case "/api/admins":
                 return 1;
             // tout le reste : admin
@@ -847,6 +848,8 @@ public class TKWebPanel : Plugin
                 return ApiMapVehicles();
             case "/api/acdismissed":
                 return ApiAcDismissed();
+            case "/api/rankings":
+                return ApiRankings();
             case "/api/acdismiss":
                 return ApiAcDismiss(body);
             case "/api/banip":
@@ -4712,6 +4715,184 @@ public class TKWebPanel : Plugin
             File.WriteAllLines(AcDismissedPath(), lines.ToArray());
             StaffLog("marque l'alerte anti-cheat " + key + " comme faux positif");
             return "{\"ok\":true}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Classements RP (v3.3) : agrège fortune, entreprises, immobilier,
+    // véhicules, niveau, récolte, kills/morts (journal 92 j) par personnage.
+    // Calcul coûteux -> cache 5 minutes.
+    // ------------------------------------------------------------------
+    private static string rankingsCache;
+    private static DateTime rankingsCacheTime = DateTime.MinValue;
+    private static readonly object rankingsLock = new object();
+
+    private class RankChar
+    {
+        public int Id { get; set; }
+        public int AccountId { get; set; }
+        public string Firstname { get; set; }
+        public string Lastname { get; set; }
+        public string Inventory { get; set; }
+        public double Bank { get; set; }
+        public int Level { get; set; }
+        public int XP { get; set; }
+        public int StatRock { get; set; }
+        public int StatTree { get; set; }
+        public int StatCopper { get; set; }
+        public int StatDiamond { get; set; }
+        public double WorkTime { get; set; }
+    }
+    private class RankAcct
+    {
+        public int Id { get; set; }
+        public string SteamId { get; set; }
+        public string Username { get; set; }
+    }
+    private class RankBiz
+    {
+        public int OwnerId { get; set; }
+        public int Nb { get; set; }
+        public double Total { get; set; }
+    }
+    private class RankPerm
+    {
+        public string Permissions { get; set; }
+        public double Price { get; set; }
+    }
+
+    private string ApiRankings()
+    {
+        lock (rankingsLock)
+        {
+            if (rankingsCache != null && (DateTime.Now - rankingsCacheTime).TotalSeconds < 300)
+            {
+                return rankingsCache;
+            }
+        }
+        try
+        {
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var kills = new Dictionary<string, int>();
+            var deaths = new Dictionary<string, int>();
+            try
+            {
+                if (actDir != null && Directory.Exists(actDir))
+                {
+                    Regex kr = new Regex(@"\] KILL — .* \((\d{15,20})\) : .* \((\d{15,20})\)");
+                    foreach (string f in Directory.GetFiles(actDir, "activity-*.log"))
+                    {
+                        foreach (string line in File.ReadAllLines(f))
+                        {
+                            Match m = kr.Match(line);
+                            if (!m.Success) continue;
+                            string k = m.Groups[1].Value, v = m.Groups[2].Value;
+                            int n;
+                            kills.TryGetValue(k, out n); kills[k] = n + 1;
+                            deaths.TryGetValue(v, out n); deaths[v] = n + 1;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+            try
+            {
+                var accts = new Dictionary<int, RankAcct>();
+                foreach (RankAcct a in conn.Query<RankAcct>("SELECT Id, SteamId, Username FROM Accounts"))
+                {
+                    accts[a.Id] = a;
+                }
+                var bizs = new Dictionary<int, RankBiz>();
+                foreach (RankBiz b in conn.Query<RankBiz>("SELECT OwnerId, COUNT(*) as Nb, SUM(Bank) as Total FROM Bizs WHERE OwnerId > 0 GROUP BY OwnerId"))
+                {
+                    bizs[b.OwnerId] = b;
+                }
+                Regex ownRe = new Regex("\"characterId\"\\s*:\\s*(\\d+)");
+                var areaCount = new Dictionary<int, int>();
+                var areaValue = new Dictionary<int, double>();
+                foreach (RankPerm a in conn.Query<RankPerm>("SELECT Permissions, Price FROM Areas WHERE Permissions IS NOT NULL AND Permissions != ''"))
+                {
+                    Match m = ownRe.Match(a.Permissions ?? "");
+                    if (!m.Success) continue;
+                    int oid = int.Parse(m.Groups[1].Value);
+                    if (oid <= 0) continue;
+                    int c; areaCount.TryGetValue(oid, out c); areaCount[oid] = c + 1;
+                    double v; areaValue.TryGetValue(oid, out v); areaValue[oid] = v + a.Price;
+                }
+                var vehCount = new Dictionary<int, int>();
+                foreach (RankPerm vh in conn.Query<RankPerm>("SELECT Permissions, 0 as Price FROM Vehicles WHERE Permissions IS NOT NULL AND Permissions != ''"))
+                {
+                    Match m = ownRe.Match(vh.Permissions ?? "");
+                    if (!m.Success) continue;
+                    int oid = int.Parse(m.Groups[1].Value);
+                    if (oid <= 0) continue;
+                    int c; vehCount.TryGetValue(oid, out c); vehCount[oid] = c + 1;
+                }
+
+                StringBuilder sb = new StringBuilder("[");
+                bool first = true;
+                foreach (RankChar c in conn.Query<RankChar>(
+                    "SELECT Id, AccountId, Firstname, Lastname, Inventory, Bank, Level, XP, StatRock, StatTree, StatCopper, StatDiamond, WorkTime FROM Characters"))
+                {
+                    if (string.IsNullOrEmpty(c.Firstname))
+                    {
+                        continue;
+                    }
+                    RankAcct a;
+                    accts.TryGetValue(c.AccountId, out a);
+                    double money = WalletMoney(c.Inventory);
+                    RankBiz bz; bizs.TryGetValue(c.Id, out bz);
+                    int ac; areaCount.TryGetValue(c.Id, out ac);
+                    double av; areaValue.TryGetValue(c.Id, out av);
+                    int vc; vehCount.TryGetValue(c.Id, out vc);
+                    int kk = 0, dd = 0;
+                    if (a != null && a.SteamId != null)
+                    {
+                        kills.TryGetValue(a.SteamId, out kk);
+                        deaths.TryGetValue(a.SteamId, out dd);
+                    }
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append("{\"id\":").Append(c.Id);
+                    sb.Append(",\"name\":").Append(Json.Str((c.Firstname + " " + c.Lastname).Trim()));
+                    sb.Append(",\"username\":").Append(Json.Str(a != null ? (a.Username ?? "") : ""));
+                    sb.Append(",\"steamId\":").Append(Json.Str(a != null ? (a.SteamId ?? "") : ""));
+                    sb.Append(",\"money\":").Append(money.ToString("0", ci));
+                    sb.Append(",\"bank\":").Append(c.Bank.ToString("0", ci));
+                    sb.Append(",\"level\":").Append(c.Level);
+                    sb.Append(",\"xp\":").Append(c.XP);
+                    sb.Append(",\"bizCount\":").Append(bz != null ? bz.Nb : 0);
+                    sb.Append(",\"bizBank\":").Append((bz != null ? bz.Total : 0).ToString("0", ci));
+                    sb.Append(",\"areaCount\":").Append(ac);
+                    sb.Append(",\"areaValue\":").Append(av.ToString("0", ci));
+                    sb.Append(",\"vehCount\":").Append(vc);
+                    sb.Append(",\"harvest\":").Append(c.StatRock + c.StatTree + c.StatCopper + c.StatDiamond);
+                    sb.Append(",\"workTime\":").Append(c.WorkTime.ToString("0", ci));
+                    sb.Append(",\"kills\":").Append(kk);
+                    sb.Append(",\"deaths\":").Append(dd);
+                    sb.Append("}");
+                }
+                sb.Append("]");
+                string result = sb.ToString();
+                lock (rankingsLock)
+                {
+                    rankingsCache = result;
+                    rankingsCacheTime = DateTime.Now;
+                }
+                return result;
+            }
+            finally
+            {
+                conn.Close();
+            }
         }
         catch (Exception ex)
         {
