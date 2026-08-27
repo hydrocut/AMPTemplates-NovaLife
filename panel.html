@@ -1087,11 +1087,15 @@ function notifyAreaOwner(areaId){
 
 var slogTimer = null;
 var suspVpnSet = {};
+var suspBlockedSet = {};
 function ipChip(ip){
   var vpn = suspVpnSet[ip] ? ' <span class="vpnb" title="IP VPN/proxy/datacenter détectée">VPN</span>' : '';
   return '<a href="#" class="ipl mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>' + vpn;
 }
 function suspBanBtn(ip){
+  if(suspBlockedSet[ip]){
+    return '<span class="badge" style="margin-left:auto;background:#3fb95022;color:#3fb950" title="Cette IP est déjà bloquée au niveau réseau (banned.txt)">✓ IP déjà bannie</span>';
+  }
   return '<button class="sban" title="Bannir cette IP au niveau réseau" onclick="if(confirm(\'Bannir l’IP ' + esc(ip) + ' ? Tous les comptes derrière seront bloqués.\'))banIpFromJournal(\'' + esc(ip) + '\')">Bannir</button>';
 }
 function loadSuspects(){
@@ -1101,6 +1105,8 @@ function loadSuspects(){
     if(r.error){ b.innerHTML = '<span class="muted">' + esc(r.error) + '</span>'; return; }
     suspVpnSet = {};
     (r.vpnIps || []).forEach(function(ip){ suspVpnSet[ip] = 1; });
+    suspBlockedSet = {};
+    (r.blockedIps || []).forEach(function(ip){ suspBlockedSet[ip] = 1; });
     var ev = (r.shared || []).filter(function(x){ return x.evasion; });
     var sh = (r.shared || []).filter(function(x){ return !x.evasion; });
     var multi = r.multi || [], bs = r.bannedSeen || [];
@@ -1315,7 +1321,10 @@ function banIpManual(){
 }
 function banIpFromJournal(ip){
   api('banipraw', {ip: ip}).then(function(r){
-    if(r.error){ toast(r.error, true); } else { toast('IP ' + r.ip + ' bannie' + (r.kicked ? ' — ' + r.kicked + ' déconnecté(s)' : '')); }
+    if(r.error){ toast(r.error, true); }
+    else if(r.already){ toast('IP ' + r.ip + ' déjà bannie au niveau réseau — rien à faire ✓'); }
+    else { toast('IP ' + r.ip + ' bannie' + (r.kicked ? ' — ' + r.kicked + ' déconnecté(s)' : '')); }
+    if(typeof loadSuspects === 'function') loadSuspects();
   });
 }
 function floodUnban(ip){

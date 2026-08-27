@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.14 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.14.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -4411,6 +4411,10 @@ public class TKWebPanel : Plugin
         {
             string f = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiFlood"), "banned.txt");
             string existing = File.Exists(f) ? File.ReadAllText(f) : "";
+            if (existing.Contains(ip + ";"))
+            {
+                return "{\"ok\":true,\"already\":true,\"ip\":" + Json.Str(ip) + ",\"kicked\":0}";
+            }
             if (!existing.Contains(ip + ";"))
             {
                 File.AppendAllText(f, (existing.Length > 0 && !existing.EndsWith("\n") ? "\n" : "")
@@ -4871,10 +4875,33 @@ public class TKWebPanel : Plugin
         catch
         {
         }
+        // IP déjà bannies au pare-feu applicatif (banned.txt de TKAntiFlood)
+        List<string> blockedIps = new List<string>();
+        try
+        {
+            string bf = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiFlood"), "banned.txt");
+            if (File.Exists(bf))
+            {
+                foreach (string line in File.ReadAllLines(bf))
+                {
+                    string t2 = line.Trim();
+                    if (t2.Length == 0 || t2.StartsWith("#")) continue;
+                    int sc = t2.IndexOf(';');
+                    if (sc > 0)
+                    {
+                        blockedIps.Add(Json.Str(t2.Substring(0, sc)));
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
         return "{\"shared\":[" + string.Join(",", shared.ToArray())
             + "],\"multi\":[" + string.Join(",", multi.ToArray())
             + "],\"bannedSeen\":[" + string.Join(",", seen.ToArray())
-            + "],\"vpnIps\":[" + string.Join(",", vpnIps.ToArray()) + "]}";
+            + "],\"vpnIps\":[" + string.Join(",", vpnIps.ToArray())
+            + "],\"blockedIps\":[" + string.Join(",", blockedIps.ToArray()) + "]}";
     }
 
     private class BanRow
