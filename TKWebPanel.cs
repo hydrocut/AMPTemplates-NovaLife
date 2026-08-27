@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.12 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.12.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -2048,6 +2048,13 @@ public class TKWebPanel : Plugin
                     sb.Append(",\"bans\":").Append(r.BanCount);
                     sb.Append(",\"kicks\":").Append(r.KickCount);
                     sb.Append(",\"online\":").Append(onlineIds.Contains(r.SteamId ?? "") ? "true" : "false");
+                    long hsrv = 0;
+                    lock (playLock)
+                    {
+                        LoadPlaytime();
+                        playSeconds.TryGetValue(r.SteamId ?? "", out hsrv);
+                    }
+                    sb.Append(",\"srvMin\":").Append(hsrv / 60);
                     sb.Append("}");
                 }
                 sb.Append("]");

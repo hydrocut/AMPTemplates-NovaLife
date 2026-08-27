@@ -294,7 +294,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
     <div class="tblwrap">
     <table>
-      <thead><tr><th>Pseudo</th><th>Personnage</th><th class="hide-mobile">SteamID</th><th>Vie</th><th>Espèces</th><th>Banque</th><th class="hide-mobile">Position</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Pseudo</th><th>Personnage</th><th class="hide-mobile">SteamID</th><th>Vie</th><th>Espèces</th><th>Banque</th><th title="Temps de jeu sur ce serveur, compté depuis l'activation du suivi">Heures</th><th class="hide-mobile">Position</th><th>Actions</th></tr></thead>
       <tbody id="players"><tr><td colspan="8" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
@@ -418,8 +418,8 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
     <div class="tblwrap">
     <table>
-      <thead><tr><th></th><th>Compte Steam</th><th class="hide-mobile">Personnage</th><th class="hide-mobile">SteamID</th><th>Espèces</th><th>Banque</th><th class="hide-mobile">Kicks</th><th class="hide-mobile">Bans</th><th>Statut</th><th>Actions</th></tr></thead>
-      <tbody id="history"><tr><td colspan="10" class="muted">Chargement…</td></tr></tbody>
+      <thead><tr><th></th><th>Compte Steam</th><th class="hide-mobile">Personnage</th><th class="hide-mobile">SteamID</th><th>Espèces</th><th>Banque</th><th title="Temps de jeu sur ce serveur">Heures</th><th class="hide-mobile">Kicks</th><th class="hide-mobile">Bans</th><th>Statut</th><th>Actions</th></tr></thead>
+      <tbody id="history"><tr><td colspan="11" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
   </section>
@@ -828,8 +828,8 @@ function renderPlayers(){
       ((p.firstname||'') + ' ' + (p.lastname||'')).toLowerCase().indexOf(q) !== -1 ||
       String(p.steamId).indexOf(q) !== -1;
   });
-  if(playersCache.length === 0){ tb.innerHTML = '<tr><td colspan="8" class="muted">Aucun joueur en ligne</td></tr>'; return; }
-  if(list.length === 0){ tb.innerHTML = '<tr><td colspan="8" class="muted">Aucun joueur ne correspond au filtre</td></tr>'; return; }
+  if(playersCache.length === 0){ tb.innerHTML = '<tr><td colspan="9" class="muted">Aucun joueur en ligne</td></tr>'; return; }
+  if(list.length === 0){ tb.innerHTML = '<tr><td colspan="9" class="muted">Aucun joueur ne correspond au filtre</td></tr>'; return; }
   tb.innerHTML = list.map(function(p){
     var perso = p.firstname ? esc(p.firstname + ' ' + p.lastname) : '<span class="muted">chargement…</span>';
     var admin = p.adminLevel > 0 ? ' <span class="badge admin">admin ' + p.adminLevel + '</span>' : '';
@@ -842,6 +842,7 @@ function renderPlayers(){
       '<td><span class="hp" style="background:' + hpColor(p.health) + '22;color:' + hpColor(p.health) + '">' + p.health + '</span></td>' +
       '<td>' + fmtMoney(p.money) + '</td>' +
       '<td>' + fmtMoney(p.bank) + '</td>' +
+      '<td>' + (p.srvMin > 0 ? (p.srvMin / 60).toFixed(1) + ' h' : '<span class="muted">—</span>') + '</td>' +
       '<td class="mono muted hide-mobile">' + pos + '</td>' +
       '<td class="actions">' +
         '<button class="only-mobile primary" onclick="playerActions(' + "'" + p.steamId + "'" + ')">Actions ▾</button>' +
@@ -1165,10 +1166,10 @@ function loadNewPlayers(){
   localStorage.setItem('tkweb_npdays', days);
   api('newplayers', {days: days}).then(function(r){
     var tb = document.getElementById('npbody');
-    if(r.error){ tb.innerHTML = '<tr><td colspan="10" class="muted">' + esc(r.error) + '</td></tr>'; return; }
+    if(r.error){ tb.innerHTML = '<tr><td colspan="11" class="muted">' + esc(r.error) + '</td></tr>'; return; }
     var sinceEl = document.getElementById('np-since');
     if(sinceEl && r.since) sinceEl.textContent = '· suivi actif depuis le ' + new Date(r.since * 1000).toLocaleDateString('fr-FR') + ' (les comptes plus anciens ne sont pas listés)';
-    if(!r.players.length){ tb.innerHTML = '<tr><td colspan="10" class="muted">Aucun compte créé sur les ' + r.days + ' derniers jours</td></tr>'; return; }
+    if(!r.players.length){ tb.innerHTML = '<tr><td colspan="11" class="muted">Aucun compte créé sur les ' + r.days + ' derniers jours</td></tr>'; return; }
     tb.innerHTML = r.players.map(function(p){
       return '<tr><td>' + esc(p.name || '?') + '</td><td>' + esc(p.chars || '—') + '</td><td>' + slinkSteam(p.steamId) + '</td><td>' + fmtUnix(p.first) + '</td><td>' + fmtUnix(p.last) + '</td><td>' + p.ips + '</td>' +
         '<td>' + (p.srvMin > 0 ? (p.srvMin / 60).toFixed(1) + ' h' : '<span class="muted">—</span>') + '</td>' +
@@ -1825,7 +1826,7 @@ function renderHistory(){
       ((a.firstname||'') + ' ' + (a.lastname||'')).toLowerCase().indexOf(q) !== -1 ||
       (a.steamId||'').indexOf(q) !== -1;
   });
-  if(!list.length){ tb.innerHTML = '<tr><td colspan="10" class="muted">Aucun compte</td></tr>'; return; }
+  if(!list.length){ tb.innerHTML = '<tr><td colspan="11" class="muted">Aucun compte</td></tr>'; return; }
   // Tri par defaut : en ligne d'abord, bannis en dernier, puis fortune decroissante
   list = list.slice().sort(function(x, y){
     var gx = x.online ? 0 : (x.banned ? 2 : 1);
@@ -1847,6 +1848,7 @@ function renderHistory(){
       '<td class="mono"><a href="#" class="slink" onclick="openIdentity(\'' + a.steamId + '\',\'' + esc(a.username||'') + '\');return false">' + esc(a.steamId) + '</a></td>' +
       '<td>' + fmtMoney(a.money) + '</td>' +
       '<td>' + fmtMoney(a.bank) + '</td>' +
+      '<td>' + (a.srvMin > 0 ? (a.srvMin / 60).toFixed(1) + ' h' : '<span class="muted">—</span>') + '</td>' +
       '<td>' + a.kicks + '</td>' +
       '<td>' + a.bans + (a.banned && a.banReason ? ' <span class="muted" title="' + esc(a.banReason) + '">ℹ</span>' : '') + '</td>' +
       '<td>' + statut + '</td>' +
@@ -1863,7 +1865,7 @@ function renderHistory(){
       '</td></tr>';
   }).join('');
   if(hidden > 0){
-    tb.innerHTML += '<tr><td colspan="10"><button class="morebtn" onclick="histShowAll=true;renderHistory()">Afficher les ' + hidden + ' autres comptes</button></td></tr>';
+    tb.innerHTML += '<tr><td colspan="11"><button class="morebtn" onclick="histShowAll=true;renderHistory()">Afficher les ' + hidden + ' autres comptes</button></td></tr>';
   }
 }
 var histShowAll = false;
@@ -2362,7 +2364,7 @@ function renderRankings(){
       '<td><a href="#" class="slink" onclick="playerCard(' + p.id + ',\'' + esc(p.username) + '\');return false"><b>' + esc(p.name) + '</b></a></td>' +
       '<td>' + (p.steamId ? slinkSteam(p.steamId, p.username || '?') : esc(p.username || '?')) + '</td>' +
       d.fmt(p).map(function(v){ return '<td>' + v + '</td>'; }).join('') + '</tr>';
-  }).join('') || '<tr><td colspan="10" class="muted">Aucune donn\u00e9e</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="muted">Aucune donn\u00e9e</td></tr>';
 }
 
 // --- Carte en direct ---
