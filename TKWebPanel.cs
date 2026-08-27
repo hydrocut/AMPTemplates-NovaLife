@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.10.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.11 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -1172,7 +1172,13 @@ public class TKWebPanel : Plugin
                 sb.Append("\"inGame\":").Append(inGame ? "true" : "false").Append(",");
                 sb.Append("\"x\":").Append(x.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)).Append(",");
                 sb.Append("\"y\":").Append(y.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)).Append(",");
-                sb.Append("\"z\":").Append(z.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+                long acctFirst = 0, srvSec = 0;
+                string sidStr = p.steamId.ToString();
+                lock (acctLock) { LoadAccountSeen(); accountSeen.TryGetValue(sidStr, out acctFirst); }
+                lock (playLock) { LoadPlaytime(); playSeconds.TryGetValue(sidStr, out srvSec); }
+                sb.Append("\"z\":").Append(z.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)).Append(",");
+                sb.Append("\"acctFirst\":").Append(acctFirst).Append(",");
+                sb.Append("\"srvMin\":").Append(srvSec / 60);
                 sb.Append("}");
             }
         }

@@ -289,6 +289,8 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     <h2>Joueurs en ligne</h2>
     <div class="row" style="margin-bottom:10px">
       <input id="players-filter" placeholder="Filtrer (pseudo, perso, steamid)…" style="flex:1;min-width:200px" oninput="renderPlayers()">
+      <label style="font-size:12px;white-space:nowrap"><input type="checkbox" id="players-newonly" onchange="renderPlayers()"> 🆕 nouveaux seulement</label>
+      <span id="players-newcount" class="muted" style="font-size:12px"></span>
     </div>
     <div class="tblwrap">
     <table>
@@ -802,11 +804,21 @@ function histActions(cid, steamId, banned){
   openModal('<h3>' + esc(username) + '</h3>' + b);
 }
 
+function isNewPlayer(p){
+  if(!p || !p.acctFirst || p.acctFirst <= 0) return false; // 0 = vétéran/inconnu
+  return (Date.now() / 1000 - p.acctFirst) < 3 * 86400;
+}
 function renderPlayers(){
   try { renderMapDots(); } catch(e) {}
   var tb = document.getElementById('players');
   var q = (document.getElementById('players-filter').value || '').trim().toLowerCase();
+  var newOnly = document.getElementById('players-newonly') && document.getElementById('players-newonly').checked;
+  var nowSec = Date.now() / 1000;
+  var nb = playersCache.filter(isNewPlayer).length;
+  var nc = document.getElementById('players-newcount');
+  if(nc) nc.textContent = nb > 0 ? nb + ' nouveau(x) en ligne' : '';
   var list = playersCache.filter(function(p){
+    if(newOnly && !isNewPlayer(p)) return false;
     return !q || (p.pseudo||'').toLowerCase().indexOf(q) !== -1 ||
       ((p.firstname||'') + ' ' + (p.lastname||'')).toLowerCase().indexOf(q) !== -1 ||
       String(p.steamId).indexOf(q) !== -1;
@@ -816,9 +828,10 @@ function renderPlayers(){
   tb.innerHTML = list.map(function(p){
     var perso = p.firstname ? esc(p.firstname + ' ' + p.lastname) : '<span class="muted">chargement…</span>';
     var admin = p.adminLevel > 0 ? ' <span class="badge admin">admin ' + p.adminLevel + '</span>' : '';
+    var newb = isNewPlayer(p) ? ' <span class="badge" style="background:#2ea04322;color:#3fb950" title="Compte créé il y a moins de 3 jours' + (p.srvMin >= 0 ? ' · ' + (p.srvMin / 60).toFixed(1) + ' h ici' : '') + '">🆕 nouveau</span>' : '';
     var pos = p.inGame ? p.x + ', ' + p.y + ', ' + p.z : '—';
     return '<tr>' +
-      '<td><a href="#" class="slink" onclick="playerActions(\'' + p.steamId + '\');return false">' + esc(p.pseudo) + '</a>' + admin + '</td>' +
+      '<td><a href="#" class="slink" onclick="playerActions(\'' + p.steamId + '\');return false">' + esc(p.pseudo) + '</a>' + admin + newb + '</td>' +
       '<td>' + perso + '</td>' +
       '<td class="mono hide-mobile">' + slinkSteam(String(p.steamId), String(p.steamId)) + '</td>' +
       '<td><span class="hp" style="background:' + hpColor(p.health) + '22;color:' + hpColor(p.health) + '">' + p.health + '</span></td>' +
