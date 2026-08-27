@@ -65,7 +65,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.9.2 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.10 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -83,7 +83,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.9.2 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.10 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -877,6 +877,13 @@ public class TKAntiCheat : Plugin
         }
         try
         {
+            WatchSensitive(conn, msg);
+        }
+        catch
+        {
+        }
+        try
+        {
             if (forwardCommand != null)
             {
                 forwardCommand(conn, msg, 0);
@@ -885,6 +892,88 @@ public class TKAntiCheat : Plugin
         catch
         {
         }
+    }
+
+    // ------------------------------------------------------------------
+    // SensibleWatch : les menus MelonLoader appellent des commandes du jeu
+    // (give/spawn/tp/...) sur leur PROPRE joueur -> aucune violation
+    // d'autorité, invisible pour MenuShield. On classe chaque hash une
+    // seule fois (nom résolu -> matche-t-il un motif sensible ?) puis
+    // l'invocation par un non-admin déclenche une alerte attribuée.
+    // ALERTE SEULE : la commande est transmise normalement (si le jeu la
+    // refuse côté serveur, tant mieux ; si elle passe, l'admin est prévenu).
+    private readonly Dictionary<ushort, bool> sensibleCache = new Dictionary<ushort, bool>();
+    private readonly Dictionary<ulong, float> sensibleLastAlert = new Dictionary<ulong, float>();
+    private string sensiblePatternsCached;
+    private string[] sensiblePatterns = new string[0];
+
+    private void WatchSensitive(NetworkConnectionToClient conn, CommandMessage msg)
+    {
+        if (config == null || !config.sensibleWatch || conn == null)
+        {
+            return;
+        }
+        if (!string.Equals(sensiblePatternsCached, config.sensibleWatchPatterns, StringComparison.Ordinal))
+        {
+            sensiblePatternsCached = config.sensibleWatchPatterns;
+            List<string> pats = new List<string>();
+            foreach (string raw in (config.sensibleWatchPatterns ?? "").Split(','))
+            {
+                string q = raw.Trim();
+                if (q.Length > 1)
+                {
+                    pats.Add(q);
+                }
+            }
+            sensiblePatterns = pats.ToArray();
+            sensibleCache.Clear();
+        }
+        bool watched;
+        if (!sensibleCache.TryGetValue(msg.functionHash, out watched))
+        {
+            string name = ResolveCmdName(msg.functionHash);
+            watched = false;
+            // ne pas alerter sur la conduite/synchro même si un motif matche
+            if (name.IndexOf("SendInputs", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                for (int i = 0; i < sensiblePatterns.Length; i++)
+                {
+                    if (name.IndexOf(sensiblePatterns[i], StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        watched = true;
+                        break;
+                    }
+                }
+            }
+            sensibleCache[msg.functionHash] = watched;
+        }
+        if (!watched)
+        {
+            return;
+        }
+        Player author = FindAuthor(conn);
+        if (author == null)
+        {
+            return;
+        }
+        int lvl = 0;
+        try { lvl = author.account != null ? author.account.adminLevel : 0; } catch { }
+        if (lvl > 0)
+        {
+            return; // admin légitime : rien à signaler
+        }
+        ulong sid = author.steamId;
+        float now = Time.realtimeSinceStartup;
+        float last;
+        sensibleLastAlert.TryGetValue(sid, out last);
+        if (now - last < 30f)
+        {
+            return;
+        }
+        sensibleLastAlert[sid] = now;
+        Alert("SENSIBLE", SafePseudo(author), sid,
+            "commande sensible invoquée sans être admin : " + ResolveCmdName(msg.functionHash)
+            + " (signature de menu de triche type MelonLoader)");
     }
 
     // Détecte une VRAIE injection de crash : au moins 3 flottants NaN/Infinity
@@ -942,6 +1031,7 @@ public class TKAntiCheat : Plugin
     private readonly Dictionary<ulong, List<float>> crashTimes = new Dictionary<ulong, List<float>>();
     private readonly Dictionary<ulong, float> crashLastAlert = new Dictionary<ulong, float>();
     private long crashQuietDropped;
+    private float crashSummaryLast;
 
     private string ResolveCmdName(ushort hash)
     {
@@ -980,30 +1070,39 @@ public class TKAntiCheat : Plugin
         times.Add(now);
         times.RemoveAll(delegate (float t) { return now - t > 120f; });
         int n = times.Count;
-        if (n < 3)
+        crashQuietDropped++;
+        // résumé discret : la protection travaille, sans accuser personne
+        // (les VICTIMES de la contagion NaN émettent aussi des paquets NaN)
+        if (now - crashSummaryLast >= 60f)
         {
-            crashQuietDropped++;
-            return; // jeté en silence : pas assez récurrent pour accuser
+            crashSummaryLast = now;
+            Debug.Log("[TKAC] CrashGuard : " + crashQuietDropped
+                + " paquet(s) NaN jetés depuis le démarrage (" + crashTimes.Count
+                + " émetteur(s) — attaquant ET victimes de la contagion mélangés)");
+        }
+        if (!config.crashGuardAlert || n < 3)
+        {
+            return;
         }
         string pseudo = author != null ? SafePseudo(author) : ("connexion #" + conn.connectionId);
         if (string.IsNullOrEmpty(pseudo) || pseudo.Trim().Length == 0)
         {
             pseudo = "Joueur " + sid;
         }
-        bool kick = config.crashGuardKick && author != null && n >= 5;
+        bool kick = config.crashGuardKick && author != null && n >= 20;
         float last;
         crashLastAlert.TryGetValue(sid, out last);
         if (now - last >= 30f || kick)
         {
             crashLastAlert[sid] = now;
-            Alert("CRASH", pseudo, sid, "tentative de crash bloquée : " + why
+            Alert("CRASH", pseudo, sid, "émet des paquets NaN (crasher OU victime de la contagion) : " + why
                 + " via " + ResolveCmdName(msg.functionHash)
                 + " — " + n + " paquet(s) en 2 min" + (kick ? " — kick" : ""));
         }
         if (kick)
         {
             times.Clear();
-            try { author.Disconnect("Tentative de crash serveur (paquets malformés)"); } catch { }
+            try { author.Disconnect("Paquets malformés répétés (crash NaN)"); } catch { }
         }
     }
 
@@ -1285,6 +1384,15 @@ public class TKAntiCheatConfig
     // NaN/Infinity qui provoquent les écrans noirs. Actif par défaut.
     public bool crashGuard = true;
     public bool crashGuardKick = false;
+    // SensibleWatch : alerte quand un joueur NON admin invoque une commande
+    // dont le nom contient un de ces motifs (menus MelonLoader type Hello
+    // Kitty / Akayro). Alerte seule, jamais de blocage automatique.
+    // Alertes CRASH par joueur : OFF par défaut — les victimes de la
+    // contagion NaN émettent aussi des paquets NaN, l'attribution accuse
+    // des innocents. Le blocage, lui, est toujours actif (crashGuard).
+    public bool crashGuardAlert = false;
+    public bool sensibleWatch = true;
+    public string sensibleWatchPatterns = "Admin,Give,Spawn,Revive,SetHealth,SetMoney,SetBank,SetJob,Teleport,Weather,SetTime,Announce,ClearInventory";
     // Raisons de gain d'argent considérées légitimes (sous-chaînes, minuscule)
     public string[] reasonWhitelist = new string[]
     {
@@ -1324,6 +1432,9 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"menuShieldThreshold\": " + c.menuShieldThreshold + ",");
         sb.AppendLine("  \"crashGuard\": " + (c.crashGuard ? "true" : "false") + ",");
         sb.AppendLine("  \"crashGuardKick\": " + (c.crashGuardKick ? "true" : "false") + ",");
+        sb.AppendLine("  \"crashGuardAlert\": " + (c.crashGuardAlert ? "true" : "false") + ",");
+        sb.AppendLine("  \"sensibleWatch\": " + (c.sensibleWatch ? "true" : "false") + ",");
+        sb.AppendLine("  \"sensibleWatchPatterns\": \"" + (c.sensibleWatchPatterns ?? "").Replace("\\", "").Replace("\"", "") + "\",");
         sb.AppendLine("  \"menuShieldIgnore\": \"" + (c.menuShieldIgnore ?? "").Replace("\\", "").Replace("\"", "") + "\",");
         sb.Append("  \"reasonWhitelist\": [");
         for (int i = 0; i < c.reasonWhitelist.Length; i++)
@@ -1375,6 +1486,10 @@ public class TKAntiCheatConfig
         if (c.menuShieldThreshold < 1) c.menuShieldThreshold = 1;
         c.crashGuard = GetBool(json, "crashGuard", c.crashGuard);
         c.crashGuardKick = GetBool(json, "crashGuardKick", c.crashGuardKick);
+        c.crashGuardAlert = GetBool(json, "crashGuardAlert", c.crashGuardAlert);
+        c.sensibleWatch = GetBool(json, "sensibleWatch", c.sensibleWatch);
+        Match swm = Regex.Match(json, @"""sensibleWatchPatterns""\s*:\s*""(?<v>[^""]*)""");
+        if (swm.Success) c.sensibleWatchPatterns = swm.Groups["v"].Value;
         Match msi = Regex.Match(json, @"""menuShieldIgnore""\s*:\s*""(?<v>[^""]*)""");
         if (msi.Success) c.menuShieldIgnore = msi.Groups["v"].Value;
         if (c.spamThreshold < 5) c.spamThreshold = 5;
