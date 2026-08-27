@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=100
-Meta.ReleaseNotes=TKAntiCheat v1.12 : detecteur VPN-proxy-datacenter via ip-api.com (gratuit sans cle) a la connexion - alerte VPN, kick optionnel, cache disque, admins et liste blanche exemptes. Panel v3.13.1 : toggles VPN.
+Meta.ConfigVersion=101
+Meta.ReleaseNotes=TKAntiCheat v1.12.1 : fix detecteur VPN - req.Proxy=null (piege Mono-Unity : l auto-detection de proxy faisait echouer la requete ip-api en silence) + logs de diagnostic. Le kick VPN fonctionne desormais au prochain restart.
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]

@@ -89,7 +89,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.12 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.12.1 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -617,6 +617,7 @@ public class TKAntiCheat : Plugin
             if (cached) { lock (vpnLock) { vpnFlagQueue.Add(sid); } }
             return;
         }
+        Debug.Log("[TKAC] VPN : verification de " + ip + " (joueur " + sid + ")");
         Thread t = new Thread(delegate ()
         {
             bool isVpn = QueryVpn(ip);
@@ -643,6 +644,7 @@ public class TKAntiCheat : Plugin
         {
             string url = "http://ip-api.com/json/" + ip + "?fields=proxy,hosting,status";
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+            req.Proxy = null; // Mono/Unity : évite l'auto-détection de proxy qui fait échouer/bloquer la requête
             req.Timeout = 6000;
             req.UserAgent = "TKAntiCheat";
             using (WebResponse resp = req.GetResponse())
@@ -651,11 +653,13 @@ public class TKAntiCheat : Plugin
                 string body = sr.ReadToEnd();
                 bool proxy = Regex.IsMatch(body, "\"proxy\"\\s*:\\s*true");
                 bool hosting = Regex.IsMatch(body, "\"hosting\"\\s*:\\s*true");
+                Debug.Log("[TKAC] VPN : " + ip + " -> proxy=" + proxy + " hosting=" + hosting);
                 return proxy || (config.vpnBlockHosting && hosting);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.LogWarning("[TKAC] VPN : requête échouée pour " + ip + " (" + ex.Message + ") — non bloqué");
             return false; // en cas d'échec API : on ne bloque jamais
         }
     }
