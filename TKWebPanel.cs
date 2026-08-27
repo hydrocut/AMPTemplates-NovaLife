@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.14.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.15 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -5651,9 +5651,34 @@ public class TKWebPanel : Plugin
         return map;
     }
 
+    private HashSet<string> LoadVpnIpSet()
+    {
+        HashSet<string> set = new HashSet<string>();
+        try
+        {
+            string vf = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiCheat"), "vpncache.tsv");
+            if (File.Exists(vf))
+            {
+                foreach (string line in File.ReadAllLines(vf))
+                {
+                    string[] pr = line.Split('\t');
+                    if (pr.Length >= 2 && pr[1] == "1")
+                    {
+                        set.Add(pr[0]);
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+        return set;
+    }
+
     private string ApiIdentity(string steamId, string ip)
     {
         Dictionary<string, string> chars = LoadCharNames(string.IsNullOrEmpty(ip) ? (steamId ?? "").Trim() : null);
+        HashSet<string> vpnSet = LoadVpnIpSet();
         lock (identLock)
         {
             if (!string.IsNullOrEmpty(ip))
@@ -5696,6 +5721,7 @@ public class TKWebPanel : Plugin
                 f2 = false;
                 sb2.Append("{\"ip\":").Append(Json.Str(ipkv.Key));
                 sb2.Append(",\"first\":").Append(ipkv.Value.first).Append(",\"last\":").Append(ipkv.Value.last);
+                sb2.Append(",\"vpn\":").Append(vpnSet.Contains(ipkv.Key) ? "true" : "false");
                 sb2.Append(",\"shared\":").Append(shared).Append("}");
             }
             sb2.Append("]}");

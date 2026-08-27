@@ -728,9 +728,14 @@ function openIdentity(steamId, pseudo){
       '<p class="muted mono" style="font-size:12px">SteamID ' + esc(steamId) + '</p>';
     if(!r.ips.length){ h += '<p class="muted">Aucune IP enregistrée (le joueur doit s’être connecté depuis l’activation du journal).</p>'; }
     else {
-      h += '<div class="tblwrap"><table><thead><tr><th>Adresse IP</th><th>Autres comptes</th><th>Vue la 1re fois</th><th>Dernière fois</th></tr></thead><tbody>';
+      var hasVpn = r.ips.some(function(ip){ return ip.vpn; });
+      var hasClean = r.ips.some(function(ip){ return !ip.vpn; });
+      h += '<div class="tblwrap"><table><thead><tr><th>Adresse IP</th><th>Type</th><th>Autres comptes</th><th>Vue la 1re fois</th><th>Dernière fois</th></tr></thead><tbody>';
       r.ips.sort(function(a,b){ return b.last - a.last; }).forEach(function(ip){
-        h += '<tr><td><a href="#" onclick="openIdentityIp(\'' + ip.ip + '\');return false" class="mono">' + esc(ip.ip) + '</a></td>' +
+        var type = ip.vpn ? '<span class="vpnb">VPN</span>'
+          : (hasVpn && hasClean ? '<span class="badge" style="background:#3fb95022;color:#3fb950" title="Ce compte utilise des VPN, mais cette IP est claire : c’est très probablement sa vraie connexion">🏠 IP réelle probable</span>' : '<span class="muted">—</span>');
+        h += '<tr' + (ip.vpn ? '' : (hasVpn && hasClean ? ' style="background:#3fb9500d"' : '')) + '><td><a href="#" onclick="openIdentityIp(\'' + ip.ip + '\');return false" class="mono">' + esc(ip.ip) + '</a></td>' +
+          '<td>' + type + '</td>' +
           '<td>' + (ip.shared>0 ? '<span class="badge" style="color:var(--warn,#e3b341)">' + ip.shared + ' autre(s)</span>' : '<span class="muted">—</span>') + '</td>' +
           '<td>' + fmtDate(ip.first) + '</td><td>' + fmtDate(ip.last) + '</td></tr>';
       });
@@ -1138,7 +1143,11 @@ function loadSuspects(){
     // 3) Comptes multi-IP
     multi.forEach(function(x){
       var nv = x.ips.filter(function(ip){ return suspVpnSet[ip]; }).length;
+      var clean = x.ips.filter(function(ip){ return !suspVpnSet[ip]; });
       var meta = x.ips.length + ' IP' + (nv>0 ? ' · <span style="color:#ff7b72">' + nv + ' VPN</span>' : '');
+      if(nv > 0 && clean.length > 0 && clean.length <= 2){
+        meta += ' · <span style="color:#3fb950">🏠 réelle probable : ' + clean.map(function(ip){ return '<a href="#" class="ipl mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>'; }).join(', ') + '</span>';
+      }
       out += '<div class="scard info"><div class="schead">🌐 ' + slinkSteam(x.sid, x.name) + (x.banned ? ' <span class="badge" style="background:#ff5c5c22;color:#ff7b72">BANNI</span>' : '') + ' <span class="muted" style="font-weight:400;font-size:12px">' + meta + '</span></div>' +
         '<div class="sacc">' + x.ips.slice(0,8).map(ipChip).join(' &nbsp; ') + '</div></div>';
     });

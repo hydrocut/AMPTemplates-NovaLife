@@ -89,7 +89,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.12.3 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.13 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -667,7 +667,7 @@ public class TKAntiCheat : Plugin
     {
         try
         {
-            string url = "http://ip-api.com/json/" + ip + "?fields=proxy,hosting,status";
+            string url = "http://ip-api.com/json/" + ip + "?fields=proxy,hosting,isp,status";
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
             req.Proxy = null; // Mono/Unity : évite l'auto-détection de proxy qui fait échouer/bloquer la requête
             req.Timeout = 6000;
@@ -678,7 +678,20 @@ public class TKAntiCheat : Plugin
                 string body = sr.ReadToEnd();
                 bool proxy = Regex.IsMatch(body, "\"proxy\"\\s*:\\s*true");
                 bool hosting = Regex.IsMatch(body, "\"hosting\"\\s*:\\s*true");
-                Debug.Log("[TKAC] VPN : " + ip + " -> proxy=" + proxy + " hosting=" + hosting);
+                string isp = "";
+                Match mi = Regex.Match(body, "\"isp\"\\s*:\\s*\"(?<v>[^\"]*)\"");
+                if (mi.Success) isp = mi.Groups["v"].Value;
+                // cloud gaming légitime (GeForce NOW...) : toléré même si hosting
+                foreach (string raw in (config.vpnIspAllow ?? "").Split(','))
+                {
+                    string q = raw.Trim();
+                    if (q.Length > 1 && isp.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        Debug.Log("[TKAC] VPN : " + ip + " -> cloud gaming toléré (" + isp + ")");
+                        return false;
+                    }
+                }
+                Debug.Log("[TKAC] VPN : " + ip + " -> proxy=" + proxy + " hosting=" + hosting + " isp=" + isp);
                 return proxy || (config.vpnBlockHosting && hosting);
             }
         }
@@ -1736,6 +1749,9 @@ public class TKAntiCheatConfig
     public bool vpnKick = false;              // kick auto si VPN détecté
     public bool vpnBlockHosting = true;       // traiter aussi l'hébergement/datacenter comme VPN
     public string vpnWhitelist = "";          // IP ou préfixes exemptés (virgules)
+    // FAI tolérés malgré hosting=true : cloud gaming (les joueurs GeForce
+    // NOW & co jouent depuis un datacenter légitime). Sous-chaînes, virgules.
+    public string vpnIspAllow = "NVIDIA,GeForce,Shadow,Blade,Boosteroid";
     public bool flyCheck = true;
     public float flyHeight = 25f;
     public int flySeconds = 5;
@@ -1826,6 +1842,7 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"vpnKick\": " + (c.vpnKick ? "true" : "false") + ",");
         sb.AppendLine("  \"vpnBlockHosting\": " + (c.vpnBlockHosting ? "true" : "false") + ",");
         sb.AppendLine("  \"vpnWhitelist\": \"" + (c.vpnWhitelist ?? "").Replace("\\", "").Replace("\"", "") + "\",");
+        sb.AppendLine("  \"vpnIspAllow\": \"" + (c.vpnIspAllow ?? "").Replace("\\", "").Replace("\"", "") + "\",");
         sb.AppendLine("  \"flyCheck\": " + (c.flyCheck ? "true" : "false") + ",");
         sb.AppendLine("  \"flyHeight\": " + c.flyHeight.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"flySeconds\": " + c.flySeconds + ",");
@@ -1887,6 +1904,8 @@ public class TKAntiCheatConfig
         c.vpnBlockHosting = GetBool(json, "vpnBlockHosting", c.vpnBlockHosting);
         Match vwm = Regex.Match(json, @"""vpnWhitelist""\s*:\s*""(?<v>[^""]*)""");
         if (vwm.Success) c.vpnWhitelist = vwm.Groups["v"].Value;
+        Match via = Regex.Match(json, @"""vpnIspAllow""\s*:\s*""(?<v>[^""]*)""");
+        if (via.Success) c.vpnIspAllow = via.Groups["v"].Value;
         c.flyCheck = GetBool(json, "flyCheck", c.flyCheck);
         c.flyHeight = (float)GetDouble(json, "flyHeight", c.flyHeight);
         if (c.flyHeight < 8f) c.flyHeight = 8f;
