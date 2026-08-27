@@ -89,7 +89,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.13 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.13.1 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -988,6 +988,13 @@ public class TKAntiCheat : Plugin
         }
         float deltaY = (pos.y - t.lastY) / (dt > 0.01f ? dt : 1f);
         t.lastY = pos.y;
+        // intérieurs spéciaux (grottes, instances) : souvent autour de y=0,
+        // et le sol/plafond y piègent les raycasts -> on ne juge pas.
+        if (pos.y < 1f)
+        {
+            t.flyStreak = 0;
+            return;
+        }
         bool airborne;
         RaycastHit hit;
         if (Physics.Raycast(pos + Vector3.up * 1.5f, Vector3.down, out hit, config.flyHeight + 1.5f))
@@ -997,6 +1004,13 @@ public class TKAntiCheat : Plugin
         else
         {
             airborne = true; // rien sous le véhicule sur flyHeight mètres
+        }
+        // grotte/tunnel/intérieur : un PLAFOND au-dessus = pas un fly hack
+        // (un vrai fly vole à ciel ouvert). Le raycast down peut rater le
+        // sol d'une grotte (démarré dans la géométrie), pas celui-ci.
+        if (airborne && Physics.Raycast(pos, Vector3.up, 80f))
+        {
+            airborne = false;
         }
         if (airborne && deltaY > -3f)
         {

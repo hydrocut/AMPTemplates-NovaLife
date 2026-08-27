@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=106
-Meta.ReleaseNotes=TKAntiCheat v1.13 : le cloud gaming (GeForce NOW-NVIDIA, Shadow, Boosteroid - liste configurable) n est plus traite comme VPN. Panel v3.15 : badge VPN par IP dans la fiche d identites et mise en avant de l IP reelle probable quand un compte melange VPN et IP claire.
+Meta.ConfigVersion=107
+Meta.ReleaseNotes=TKAntiCheat v1.13.1 : anti-fly compatible grottes et interieurs (plafond au-dessus = pas un fly hack ; zones y<1 ignorees). Panel v3.15.1 : le detail des alertes s affiche en entier (retour a la ligne).
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]
