@@ -329,7 +329,7 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.5 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.6 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -3970,9 +3970,9 @@ public class TKWebPanel : Plugin
         List<int> ids = LoadBenchIds();
         if (ids.Count == 0)
         {
-            return "{\"ok\":true,\"removed\":0}";
+            return "{\"ok\":true,\"removed\":0,\"remaining\":0}";
         }
-        // 1) despawn du monde (main thread)
+        // 1) repasser en réel + ranger (main thread) — best-effort, sans bloquer
         RunOnMain(delegate
         {
             foreach (int id in ids)
@@ -3988,6 +3988,12 @@ public class TKWebPanel : Plugin
                     {
                         Nova.v.TryReplaceFakeWithCar(id);
                     }
+                }
+                catch
+                {
+                }
+                try
+                {
                     if (!lv.isStowed)
                     {
                         Nova.v.StowVehicle(id);
@@ -4000,35 +4006,51 @@ public class TKWebPanel : Plugin
             return (object)null;
         });
         // 2) suppression en base (hors main thread)
-        int removed = 0;
         foreach (int id in ids)
         {
             try
             {
-                if (LifeDB.RemoveVehicle(id).Result)
-                {
-                    removed++;
-                }
+                LifeDB.RemoveVehicle(id).Wait();
             }
             catch
             {
             }
         }
-        // 3) retrait de la liste mémoire
+        // 3) retrait du monde + recalcul de ce qui reste réellement (main thread).
+        //    On ne garde dans bench.json QUE les véhicules encore présents
+        //    (ex. occupés par un joueur) : jamais d'orphelins, et un second clic
+        //    « Supprimer » réessaie proprement.
         return (string)RunOnMain(delegate
         {
+            int removed = 0;
+            List<int> remaining = new List<int>();
             foreach (int id in ids)
             {
                 LifeVehicle lv = Nova.v.GetVehicle(id);
                 if (lv != null)
                 {
-                    Nova.v.vehicles.Remove(lv);
+                    try
+                    {
+                        Nova.v.vehicles.Remove(lv);
+                    }
+                    catch
+                    {
+                    }
+                    lv = Nova.v.GetVehicle(id);
+                }
+                if (lv == null)
+                {
+                    removed++;
+                }
+                else
+                {
+                    remaining.Add(id);
                 }
             }
-            SaveBenchIds(new List<int>());
-            StaffLog("test de charge : " + removed + " véhicules de test supprimés");
-            Debug.Log("[TKWEB] BENCH clear " + removed + " véhicules");
-            return "{\"ok\":true,\"removed\":" + removed + "}";
+            SaveBenchIds(remaining);
+            StaffLog("test de charge : " + removed + " véhicules supprimés" + (remaining.Count > 0 ? " (" + remaining.Count + " restants, occupés ?)" : ""));
+            Debug.Log("[TKWEB] BENCH clear removed=" + removed + " remaining=" + remaining.Count);
+            return "{\"ok\":true,\"removed\":" + removed + ",\"remaining\":" + remaining.Count + "}";
         });
     }
 

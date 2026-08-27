@@ -1895,7 +1895,10 @@ function benchReal(){
 }
 function benchClear(){
   api('benchclear', {}).then(function(r){
-    if(r.error){ toast(r.error, true); } else { toast(r.removed + ' véhicule(s) supprimé(s)'); loadBench(); }
+    if(r.error){ toast(r.error, true); return; }
+    if(r.remaining){ toast(r.removed + ' supprimé(s), ' + r.remaining + ' restant(s) (occupés ?) — reclique pour réessayer', true); }
+    else { toast(r.removed + ' véhicule(s) de test supprimé(s)'); }
+    loadBench();
   });
 }
 
