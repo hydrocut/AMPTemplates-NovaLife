@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=110
-Meta.ReleaseNotes=Panel v3.16.1 : chargement automatique en cascade des infos Steam dans Nouveaux arrivants - plus besoin de cliquer Charger ligne par ligne (1 requete toutes les 600 ms, doux pour l API Steam, s arrete si on quitte l onglet).
+Meta.ConfigVersion=111
+Meta.ReleaseNotes=TKAntiCheat v1.13.2 : CrashGuard ne punit plus les victimes de la contagion NaN (seul un attaquant a flot massif est signale, seuil crashAttackerPackets 80) ; anti-fly n alerte que si le vehicule se deplace en l air (gare sur pont-toit = plus de faux positif) et est desactive par defaut.
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]

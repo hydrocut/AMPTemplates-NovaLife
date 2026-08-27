@@ -49,6 +49,8 @@ public class TKAntiCheat : Plugin
         public int overSpeedStreak;
         public int vehSpeedStreak;
         public int flyStreak;
+        public float lastFlyX;
+        public float lastFlyZ;
         public float lastY;
         public float lastFlyAlert;
         public float ignoreUntil; // téléport légitime : on ignore la vitesse un instant
@@ -89,7 +91,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.13.1 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.13.2 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -1012,7 +1014,13 @@ public class TKAntiCheat : Plugin
         {
             airborne = false;
         }
-        if (airborne && deltaY > -3f)
+        // un vrai fly hack SE DÉPLACE dans les airs ; un véhicule garé sur un
+        // pont/toit ou glitché en hauteur est immobile -> jamais signalé.
+        float horiz = new Vector2(pos.x - t.lastFlyX, pos.z - t.lastFlyZ).magnitude;
+        t.lastFlyX = pos.x;
+        t.lastFlyZ = pos.z;
+        bool moving = horiz > 3f; // > ~3 m/s au sol horizontal
+        if (airborne && moving && deltaY > -3f)
         {
             t.flyStreak++;
             if (t.flyStreak >= config.flySeconds && now - t.lastFlyAlert >= 30f)
@@ -1472,7 +1480,14 @@ public class TKAntiCheat : Plugin
                 + " paquet(s) NaN jetés depuis le démarrage (" + crashTimes.Count
                 + " émetteur(s) — attaquant ET victimes de la contagion mélangés)");
         }
-        if (!config.crashGuardAlert || n < 3)
+        // Seuls les ATTAQUANTS (flot massif) sont signalés ; les victimes de
+        // la contagion (quelques paquets) sont jetées en silence, jamais
+        // accusées ni kickées.
+        if (n < config.crashAttackerPackets)
+        {
+            return;
+        }
+        if (!config.crashGuardAlert && !config.crashGuardKick)
         {
             return;
         }
@@ -1481,13 +1496,13 @@ public class TKAntiCheat : Plugin
         {
             pseudo = "Joueur " + sid;
         }
-        bool kick = config.crashGuardKick && author != null && n >= 20;
+        bool kick = config.crashGuardKick && author != null && n >= config.crashAttackerPackets * 3;
         float last;
         crashLastAlert.TryGetValue(sid, out last);
         if (now - last >= 30f || kick)
         {
             crashLastAlert[sid] = now;
-            Alert("CRASH", pseudo, sid, "émet des paquets NaN (crasher OU victime de la contagion) : " + why
+            Alert("CRASH", pseudo, sid, "FLOT de paquets NaN (attaquant probable) : " + why
                 + " via " + ResolveCmdName(msg.functionHash)
                 + " — " + n + " paquet(s) en 2 min" + (kick ? " — kick" : ""));
         }
@@ -1766,7 +1781,7 @@ public class TKAntiCheatConfig
     // FAI tolérés malgré hosting=true : cloud gaming (les joueurs GeForce
     // NOW & co jouent depuis un datacenter légitime). Sous-chaînes, virgules.
     public string vpnIspAllow = "NVIDIA,GeForce,Shadow,Blade,Boosteroid";
-    public bool flyCheck = true;
+    public bool flyCheck = false;
     public float flyHeight = 25f;
     public int flySeconds = 5;
     // Bond de distance en un relevé = téléport manifeste (m)
@@ -1814,6 +1829,11 @@ public class TKAntiCheatConfig
     public bool menuShield = true;
     public bool menuShieldKick = false;
     public int menuShieldThreshold = 3; // violations avant kick (si kick actif)
+    // CrashGuard : nb de paquets NaN en 2 min au-dessus duquel on considère
+    // un ATTAQUANT (et non une victime de la contagion). Alerte >= ce seuil,
+    // kick (si crashGuardKick) à 3x ce seuil. Défaut haut pour épargner les
+    // victimes qui n'émettent que quelques paquets.
+    public int crashAttackerPackets = 80;
     // Ordres réseau ignorés par le bouclier (sous-chaînes, séparées par des
     // virgules). CmdSendInputs = synchro volant/pédales : un client désync
     // (véhicule passé fantôme, reconnexion en voiture, passager) en envoie
@@ -1882,6 +1902,7 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"menuShield\": " + (c.menuShield ? "true" : "false") + ",");
         sb.AppendLine("  \"menuShieldKick\": " + (c.menuShieldKick ? "true" : "false") + ",");
         sb.AppendLine("  \"menuShieldThreshold\": " + c.menuShieldThreshold + ",");
+        sb.AppendLine("  \"crashAttackerPackets\": " + c.crashAttackerPackets + ",");
         sb.AppendLine("  \"crashGuard\": " + (c.crashGuard ? "true" : "false") + ",");
         sb.AppendLine("  \"crashGuardKick\": " + (c.crashGuardKick ? "true" : "false") + ",");
         sb.AppendLine("  \"crashGuardAlert\": " + (c.crashGuardAlert ? "true" : "false") + ",");
@@ -1949,6 +1970,8 @@ public class TKAntiCheatConfig
         c.menuShieldKick = GetBool(json, "menuShieldKick", c.menuShieldKick);
         c.menuShieldThreshold = (int)GetDouble(json, "menuShieldThreshold", c.menuShieldThreshold);
         if (c.menuShieldThreshold < 1) c.menuShieldThreshold = 1;
+        c.crashAttackerPackets = (int)GetDouble(json, "crashAttackerPackets", c.crashAttackerPackets);
+        if (c.crashAttackerPackets < 20) c.crashAttackerPackets = 20;
         c.crashGuard = GetBool(json, "crashGuard", c.crashGuard);
         c.crashGuardKick = GetBool(json, "crashGuardKick", c.crashGuardKick);
         c.crashGuardAlert = GetBool(json, "crashGuardAlert", c.crashGuardAlert);
