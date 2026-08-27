@@ -351,6 +351,21 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </table></div>
   </section>
 
+  <section data-tab="comptes">
+    <h2>🆕 Nouveaux arrivants <span class="muted" style="font-weight:400;font-size:12px">— comptes vus pour la première fois récemment, à surveiller</span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <label style="font-size:13px">Période : <input id="np-days" type="number" min="1" max="365" value="7" style="width:70px"> jours</label>
+      <button onclick="loadNewPlayers()">Actualiser</button>
+      <span class="muted" style="font-size:12px">Heures de jeu et âge du compte : nécessite la clé API Steam (onglet Admins).</span>
+    </div>
+    <div class="tblwrap">
+    <table>
+      <thead><tr><th>Pseudo</th><th>SteamID</th><th>Première connexion</th><th>Dernière</th><th>IPs</th><th>Heures Nova</th><th>Compte Steam créé</th><th></th></tr></thead>
+      <tbody id="npbody"><tr><td colspan="8" class="muted">Chargement…</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+
   <section data-tab="carte">
     <h2>Carte en direct <span class="muted" style="font-weight:400;font-size:12px">— joueurs actualisés toutes les 5 s · molette pour zoomer, glisser pour déplacer</span></h2>
     <div id="mapwrap">
@@ -547,6 +562,13 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </table>
     </div>
     <p class="muted" style="margin-top:8px;font-size:12px">Modo : consultation + kick, messages, notifications, chat, journal. Admin : tout sauf cette gestion des comptes. Le mot de passe propriétaire reste celui de config.json.</p>
+
+    <h2 style="margin-top:18px">Clé API Steam <span class="muted" style="font-weight:400;font-size:12px">— active les heures de jeu et l’âge des comptes dans les fiches (gratuite : steamcommunity.com/dev/apikey)</span></h2>
+    <div class="row">
+      <input id="steamkey-input" placeholder="Clé API (32 caractères)" class="mono" style="width:300px">
+      <button class="primary" onclick="steamKeySave()">Enregistrer</button>
+      <span id="steamkey-state" class="muted" style="font-size:12px"></span>
+    </div>
   </section>
 
   <section data-tab="chat">
@@ -674,6 +696,9 @@ function steamMenu(steamId){
   }
   b += '<button onclick="closeModal();openIdentity(\'' + steamId + '\',\'' + esc(a ? (a.username||'') : '') + '\')">\uD83D\uDD0E Identit\u00e9s & IP</button>';
   b += '<button onclick="closeModal();giveToPlayer(\'' + steamId + '\')">\uD83C\uDF81 Donner un objet</button>';
+  b += '<button onclick="window.open(\'https://steamcommunity.com/profiles/' + steamId + '\',\'_blank\')">\uD83D\uDD17 Profil Steam</button>';
+  b += '<button onclick="closeModal();steamInfoModal(\'' + steamId + '\')">\u23F1 Heures & compte Steam</button>';
+  if(myLevel() >= 3) b += '<button onclick="closeModal();openDossier(\'' + steamId + '\')">\uD83D\uDCC1 Dossier & preuves</button>';
   if(a && a.banned) b += '<button onclick="closeModal();histUnban(\'' + steamId + '\')">D\u00e9bannir</button>';
   else b += '<button class="danger" onclick="closeModal();histBan(\'' + steamId + '\')">Ban</button>';
   openModal('<h3>' + esc(who) + ' <span class="muted mono" style="font-size:12px;font-weight:400">' + steamId + '</span></h3>' + b);
@@ -1067,6 +1092,121 @@ function slogAuto(){
     }, 5000);
   }
 }
+function fmtUnix(u){ if(!u) return '—'; var d = new Date(u * 1000); return d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}); }
+function ageBadge(created){
+  var days = (Date.now() / 1000 - created) / 86400;
+  if(days < 30) return ' <span style="color:#ff7b72;font-weight:600">(compte récent !)</span>';
+  if(days < 180) return ' <span style="color:#e3b341">(&lt; 6 mois)</span>';
+  return '';
+}
+function loadNewPlayers(){
+  var inp = document.getElementById('np-days');
+  var days = parseInt(inp.value || '7', 10) || 7;
+  localStorage.setItem('tkweb_npdays', days);
+  api('newplayers', {days: days}).then(function(r){
+    var tb = document.getElementById('npbody');
+    if(r.error){ tb.innerHTML = '<tr><td colspan="8" class="muted">' + esc(r.error) + '</td></tr>'; return; }
+    if(!r.players.length){ tb.innerHTML = '<tr><td colspan="8" class="muted">Aucun nouveau joueur sur les ' + r.days + ' derniers jours</td></tr>'; return; }
+    tb.innerHTML = r.players.map(function(p){
+      return '<tr><td>' + esc(p.name || '?') + '</td><td>' + slinkSteam(p.steamId) + '</td><td>' + fmtUnix(p.first) + '</td><td>' + fmtUnix(p.last) + '</td><td>' + p.ips + '</td>' +
+        '<td class="np-steam"><button onclick="npSteam(this,\'' + p.steamId + '\')" style="font-size:11px;padding:3px 8px">Charger</button></td>' +
+        '<td class="np-created">—</td>' +
+        '<td><button onclick="steamMenu(\'' + p.steamId + '\')" style="font-size:11px;padding:3px 8px">Menu</button></td></tr>';
+    }).join('');
+  });
+}
+function npSteam(btn, sid){
+  btn.textContent = '…';
+  api('steaminfo', {steamId: sid}).then(function(r){
+    var row = btn.closest('tr');
+    var hcell = row.querySelector('.np-steam'), ccell = row.querySelector('.np-created');
+    if(r.error){ hcell.innerHTML = '<span class="muted" title="' + esc(r.error) + '">indispo</span>'; toast(r.error, true); return; }
+    hcell.innerHTML = r.novaMinutes >= 0 ? '<b>' + (r.novaMinutes / 60).toFixed(1) + ' h</b>' : '<span class="muted">profil privé</span>';
+    ccell.innerHTML = r.created ? new Date(r.created * 1000).toLocaleDateString('fr-FR') + ageBadge(r.created) : '<span class="muted">privé</span>';
+  });
+}
+function steamInfoModal(sid){
+  api('steaminfo', {steamId: sid}).then(function(r){
+    if(r.error) return toast(r.error, true);
+    openModal('<h3>⏱ ' + esc(r.name || sid) + ' <span class="muted mono" style="font-size:12px;font-weight:400">' + sid + '</span></h3>' +
+      '<div style="line-height:2">' +
+      'Heures sur Nova-Life : <b>' + (r.novaMinutes >= 0 ? (r.novaMinutes / 60).toFixed(1) + ' h' : 'profil privé') + '</b><br>' +
+      'Compte Steam créé : <b>' + (r.created ? new Date(r.created * 1000).toLocaleDateString('fr-FR') : 'privé') + '</b>' + (r.created ? ageBadge(r.created) : '') + '<br>' +
+      'Profil : ' + (r.public ? 'public' : '<span style="color:#e3b341">privé</span>') +
+      ' · <a href="https://steamcommunity.com/profiles/' + sid + '" target="_blank" style="color:var(--accent)">ouvrir sur Steam ↗</a></div>');
+  });
+}
+var dossierCache = null;
+function openDossier(sid){
+  api('dossier', {steamId: sid}).then(function(r){
+    if(r.error) return toast(r.error, true);
+    dossierCache = r;
+    var h = '<h3>📁 Dossier — ' + esc(r.name || '?') + ' <span class="muted mono" style="font-size:12px;font-weight:400">' + sid + '</span></h3>';
+    h += '<div style="max-height:48vh;overflow:auto">';
+    h += '<h4 style="margin:8px 0 4px">Adresses IP observées (' + r.ips.length + ')</h4>';
+    h += r.ips.map(function(i){ return '<div class="mono" style="font-size:12px">' + esc(i.ip) + ' <span class="muted">du ' + fmtUnix(i.first) + ' au ' + fmtUnix(i.last) + '</span></div>'; }).join('') || '<span class="muted">aucune</span>';
+    h += '<h4 style="margin:10px 0 4px">Détections anti-cheat (' + r.alerts.length + ')</h4>';
+    h += r.alerts.map(function(al){ return '<div style="font-size:12px;color:#ff7b72">' + esc((al.time || '') + ' [' + (al.kind || '') + '] ' + (al.detail || '')) + '</div>'; }).join('') || '<span class="muted">aucune</span>';
+    h += '<h4 style="margin:10px 0 4px">Notes du staff (' + r.notes.length + ')</h4>';
+    h += r.notes.map(function(nt){ return '<div style="font-size:12px"><span class="muted">' + esc(nt.time || '') + '</span> ' + esc(nt.text || '') + '</div>'; }).join('') || '<span class="muted">aucune</span>';
+    h += '</div>';
+    h += '<div class="row" style="margin-top:10px"><input id="doss-note" placeholder="Ajouter une note (fait constaté, heure, témoins…)" style="flex:1">' +
+         '<button onclick="dossNote(\'' + sid + '\')">Ajouter</button></div>';
+    h += '<div class="row" style="margin-top:8px"><button class="primary" onclick="dossExport(\'' + sid + '\')">⬇ Exporter le dossier (.txt)</button>' +
+         '<button onclick="window.open(\'https://steamcommunity.com/profiles/' + sid + '\',\'_blank\')">🔗 Profil Steam (signaler)</button></div>';
+    openModal(h);
+  });
+}
+function dossNote(sid){
+  var v = document.getElementById('doss-note').value.trim();
+  if(!v) return;
+  api('dossiernote', {steamId: sid, note: v}).then(function(r){
+    if(r.error) return toast(r.error, true);
+    toast('Note ajoutée au dossier');
+    openDossier(sid);
+  });
+}
+function dossExport(sid){
+  var r = dossierCache;
+  if(!r) return;
+  var L = [];
+  L.push('DOSSIER JOUEUR — serveur Nova-Life TeamKit.fr');
+  L.push('Généré le ' + new Date().toLocaleString('fr-FR'));
+  L.push('');
+  L.push('Pseudo        : ' + (r.name || '?'));
+  L.push('SteamID64     : ' + sid);
+  L.push('Profil Steam  : https://steamcommunity.com/profiles/' + sid);
+  L.push('');
+  L.push('=== ADRESSES IP OBSERVÉES (' + r.ips.length + ') ===');
+  r.ips.forEach(function(i){ L.push(i.ip + '  (première : ' + fmtUnix(i.first) + ' — dernière : ' + fmtUnix(i.last) + ')'); });
+  L.push('');
+  L.push('=== DÉTECTIONS ANTI-CHEAT (' + r.alerts.length + ') ===');
+  r.alerts.forEach(function(a){ L.push((a.time || '') + ' [' + (a.kind || '') + '] ' + (a.pseudo || '') + ' — ' + (a.detail || '')); });
+  L.push('');
+  L.push('=== NOTES DU STAFF (' + r.notes.length + ') ===');
+  r.notes.forEach(function(n){ L.push((n.time || '') + ' — ' + (n.text || '')); });
+  var blob = new Blob([L.join('\r\n')], {type: 'text/plain;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dossier_' + sid + '.txt';
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 5000);
+}
+function steamKeySave(){
+  var k = document.getElementById('steamkey-input').value.trim();
+  api('steamkey', {key: k}).then(function(r){
+    if(r.error) return toast(r.error, true);
+    document.getElementById('steamkey-input').value = '';
+    document.getElementById('steamkey-state').textContent = r.set ? 'Clé configurée ✔' : 'Aucune clé';
+    toast(r.set ? 'Clé API Steam enregistrée' : 'Clé supprimée');
+  });
+}
+function steamKeyState(){
+  api('steamkey').then(function(r){
+    var el = document.getElementById('steamkey-state');
+    if(el) el.textContent = r.set ? 'Clé configurée ✔' : 'Aucune clé pour l’instant';
+  }).catch(function(){});
+}
 function banIpManual(){
   var ip = (document.getElementById('banip-input').value || '').trim();
   if(!ip) return toast('Saisis une IP', true);
@@ -1274,8 +1414,9 @@ function showTab(name){
     b.className = b.getAttribute('data-nav') === name ? 'active' : '';
   });
   localStorage.setItem('tkweb_tab', name);
-  if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3) loadPanelUsers(); }
+  if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3){ loadPanelUsers(); steamKeyState(); } }
   if(name === 'monde'){ loadPlugins(); if(myLevel() >= 3){ loadBackups(); loadBench(); } }
+  if(name === 'comptes'){ var ndi = document.getElementById('np-days'); if(ndi && localStorage.getItem('tkweb_npdays')) ndi.value = localStorage.getItem('tkweb_npdays'); loadNewPlayers(); }
   if(name === 'carte'){ initMap(); api('mapcalib').then(function(c){ if(!c.error){ mapCal = c; renderMapDots(); } }).catch(function(){}); renderMapDots(); pollMapVehicles(); }
   if(name === 'classement') loadRankings();
   if(name === 'securite'){ if(myLevel() >= 3){ loadAcConfig(); loadServerLog(); } markAlertsSeen(); }

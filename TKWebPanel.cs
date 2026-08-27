@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.8.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.9 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -713,6 +713,9 @@ public class TKWebPanel : Plugin
             case "/api/banip":
             case "/api/banipraw":
             case "/api/serverlog":
+            case "/api/dossier":
+            case "/api/dossiernote":
+            case "/api/steamkey":
             case "/api/identity":
                 return 3;
             // modo autorisé (consultation + modération légère)
@@ -741,6 +744,8 @@ public class TKWebPanel : Plugin
             case "/api/fps":       // GET seulement, le POST est filtré plus bas
             case "/api/mapcalib":  // GET seulement, le POST (calibrer) est filtré plus bas
             case "/api/mapvehicles":
+            case "/api/steaminfo":
+            case "/api/newplayers":
             case "/api/ghoststats":
             case "/api/heavyareas":
             case "/api/floodbans":
@@ -867,6 +872,20 @@ public class TKWebPanel : Plugin
                 return ApiBanIpRaw(body);
             case "/api/serverlog":
                 return ApiServerLog(body);
+            case "/api/steaminfo":
+                return ApiSteamInfo(body);
+            case "/api/newplayers":
+                return ApiNewPlayers(body);
+            case "/api/dossier":
+                return ApiDossier(body);
+            case "/api/dossiernote":
+                return ApiDossierNote(body);
+            case "/api/steamkey":
+                if (ctx.Request.HttpMethod == "POST")
+                {
+                    return ApiSteamKey(body);
+                }
+                return "{\"set\":" + (config != null && !string.IsNullOrEmpty(config.steamApiKey) ? "true" : "false") + "}";
             case "/api/identity":
                 return ApiIdentity(ctx.Request.QueryString["steamId"], ctx.Request.QueryString["ip"]);
             case "/api/benchspawn":
@@ -4740,6 +4759,279 @@ public class TKWebPanel : Plugin
             + ",\"days\":[" + string.Join(",", dj.ToArray()) + "]}";
     }
 
+    // ------------------------------------------------------------------
+    // Fiches joueurs (v3.9) : infos Steam (heures Nova-Life, âge du compte
+    // Steam via l'API officielle, cache 6 h), nouveaux arrivants (à partir
+    // du journal d'identités), dossiers de preuves (notes staff + synthèse
+    // exportable pour signalement Steam / dépôt de plainte).
+    private readonly Dictionary<string, string> steamCache = new Dictionary<string, string>();
+    private readonly Dictionary<string, long> steamCacheTime = new Dictionary<string, long>();
+    private readonly object steamLock = new object();
+
+    private static string HttpGetShort(string url)
+    {
+        System.Net.HttpWebRequest rq = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(url);
+        rq.Timeout = 8000;
+        rq.ReadWriteTimeout = 8000;
+        rq.UserAgent = "TKWebPanel";
+        using (System.Net.WebResponse rs = rq.GetResponse())
+        using (StreamReader sr = new StreamReader(rs.GetResponseStream()))
+        {
+            return sr.ReadToEnd();
+        }
+    }
+
+    private string ApiSteamInfo(string body)
+    {
+        string sid = Json.GetString(body, "steamId", "").Trim();
+        if (!Regex.IsMatch(sid, "^7656119[0-9]{10}$"))
+        {
+            return "{\"error\":\"SteamID invalide\"}";
+        }
+        if (config == null || string.IsNullOrEmpty(config.steamApiKey))
+        {
+            return "{\"error\":\"Pas de clé API Steam configurée (onglet Admins, réservé au propriétaire)\"}";
+        }
+        lock (steamLock)
+        {
+            long t;
+            if (steamCache.ContainsKey(sid) && steamCacheTime.TryGetValue(sid, out t) && NowUnix() - t < 6 * 3600)
+            {
+                return steamCache[sid];
+            }
+        }
+        try
+        {
+            System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+            string key = config.steamApiKey.Trim();
+            string sum = HttpGetShort("https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=" + key + "&steamids=" + sid);
+            string name = Json.GetString(sum, "personaname", "");
+            int vis = Json.GetInt(sum, "communityvisibilitystate", 0);
+            long created = 0;
+            Match mc = Regex.Match(sum, "\"timecreated\"\\s*:\\s*([0-9]+)");
+            if (mc.Success)
+            {
+                long.TryParse(mc.Groups[1].Value, out created);
+            }
+            long minutes = -1;
+            try
+            {
+                string og = HttpGetShort("https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=" + key + "&steamid=" + sid + "&include_played_free_games=1");
+                Match mg = Regex.Match(og, "\"appid\"\\s*:\\s*1665030[^}]*?\"playtime_forever\"\\s*:\\s*([0-9]+)");
+                if (mg.Success)
+                {
+                    long.TryParse(mg.Groups[1].Value, out minutes);
+                }
+                else if (og.IndexOf("\"games\"", StringComparison.Ordinal) >= 0)
+                {
+                    minutes = 0; // liste de jeux visible mais Nova-Life absent/jamais lancé
+                }
+            }
+            catch
+            {
+            }
+            string res = "{\"ok\":true,\"name\":" + Json.Str(name)
+                + ",\"public\":" + (vis == 3 ? "true" : "false")
+                + ",\"created\":" + created
+                + ",\"novaMinutes\":" + minutes + "}";
+            lock (steamLock)
+            {
+                steamCache[sid] = res;
+                steamCacheTime[sid] = NowUnix();
+            }
+            return res;
+        }
+        catch (Exception ex)
+        {
+            string msg = ex.Message != null && ex.Message.Contains("403")
+                ? "clé API Steam refusée (403) — vérifie la clé" : ex.Message;
+            return "{\"error\":" + Json.Str(msg) + "}";
+        }
+    }
+
+    private static long ExtractFirstUnix(string row)
+    {
+        Match m = Regex.Match(row, "\"first\":([0-9]+)");
+        long v;
+        long.TryParse(m.Groups[1].Value, out v);
+        return v;
+    }
+
+    private string ApiNewPlayers(string body)
+    {
+        int days = Json.GetInt(body, "days", 7);
+        if (days < 1) days = 1;
+        if (days > 365) days = 365;
+        long cutoff = NowUnix() - (long)days * 86400;
+        List<string> rows = new List<string>();
+        lock (identLock)
+        {
+            foreach (KeyValuePair<string, Ident> kv in identities)
+            {
+                long first = long.MaxValue, last = 0;
+                foreach (KeyValuePair<string, IdentIp> ip in kv.Value.ips)
+                {
+                    if (ip.Value.first > 0 && ip.Value.first < first) first = ip.Value.first;
+                    if (ip.Value.last > last) last = ip.Value.last;
+                }
+                if (first == long.MaxValue || first < cutoff)
+                {
+                    continue;
+                }
+                rows.Add("{\"steamId\":\"" + kv.Key + "\",\"name\":" + Json.Str(kv.Value.name ?? "")
+                    + ",\"first\":" + first + ",\"last\":" + last + ",\"ips\":" + kv.Value.ips.Count + "}");
+            }
+        }
+        rows.Sort(delegate (string x, string y) { return ExtractFirstUnix(y).CompareTo(ExtractFirstUnix(x)); });
+        if (rows.Count > 300)
+        {
+            rows.RemoveRange(300, rows.Count - 300);
+        }
+        return "{\"days\":" + days + ",\"players\":[" + string.Join(",", rows.ToArray()) + "]}";
+    }
+
+    private string DossierPath() { return Path.Combine(pluginDir, "dossiers.json"); }
+
+    private string ApiDossier(string body)
+    {
+        string sid = Json.GetString(body, "steamId", "").Trim();
+        if (!Regex.IsMatch(sid, "^7656119[0-9]{10}$"))
+        {
+            return "{\"error\":\"SteamID invalide\"}";
+        }
+        StringBuilder sb = new StringBuilder("{\"steamId\":\"" + sid + "\"");
+        lock (identLock)
+        {
+            Ident id;
+            if (identities.TryGetValue(sid, out id))
+            {
+                sb.Append(",\"name\":" + Json.Str(id.name ?? ""));
+                List<string> ipRows = new List<string>();
+                foreach (KeyValuePair<string, IdentIp> ip in id.ips)
+                {
+                    ipRows.Add("{\"ip\":" + Json.Str(ip.Key) + ",\"first\":" + ip.Value.first + ",\"last\":" + ip.Value.last + "}");
+                }
+                sb.Append(",\"ips\":[" + string.Join(",", ipRows.ToArray()) + "]");
+            }
+            else
+            {
+                sb.Append(",\"name\":\"\",\"ips\":[]");
+            }
+        }
+        sb.Append(",\"alerts\":[");
+        try
+        {
+            string file = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiCheat"), "alerts.json");
+            if (File.Exists(file))
+            {
+                string aj = File.ReadAllText(file);
+                List<string> outA = new List<string>();
+                foreach (Match m in Regex.Matches(aj, "\\{[^{}]*\\}"))
+                {
+                    if (m.Value.Contains("\"" + sid + "\""))
+                    {
+                        outA.Add(m.Value);
+                        if (outA.Count >= 100)
+                        {
+                            break;
+                        }
+                    }
+                }
+                sb.Append(string.Join(",", outA.ToArray()));
+            }
+        }
+        catch
+        {
+        }
+        sb.Append("]");
+        sb.Append(",\"notes\":[");
+        try
+        {
+            if (File.Exists(DossierPath()))
+            {
+                string dj = File.ReadAllText(DossierPath());
+                Match sec = Regex.Match(dj, "\"" + sid + "\"\\s*:\\s*\\[(?<v>[^\\]]*)\\]");
+                if (sec.Success)
+                {
+                    sb.Append(sec.Groups["v"].Value);
+                }
+            }
+        }
+        catch
+        {
+        }
+        sb.Append("]}");
+        return sb.ToString();
+    }
+
+    private string ApiDossierNote(string body)
+    {
+        string sid = Json.GetString(body, "steamId", "").Trim();
+        if (!Regex.IsMatch(sid, "^7656119[0-9]{10}$"))
+        {
+            return "{\"error\":\"SteamID invalide\"}";
+        }
+        string note = Json.GetString(body, "note", "").Trim();
+        if (note.Length == 0)
+        {
+            return "{\"error\":\"note vide\"}";
+        }
+        if (note.Length > 2000)
+        {
+            note = note.Substring(0, 2000);
+        }
+        try
+        {
+            string entry = "{\"time\":" + Json.Str(DateTime.Now.ToString("yyyy-MM-dd HH:mm")) + ",\"text\":" + Json.Str(note) + "}";
+            string dj = File.Exists(DossierPath()) ? File.ReadAllText(DossierPath()) : "{}";
+            Match sec = Regex.Match(dj, "\"" + sid + "\"\\s*:\\s*\\[");
+            if (sec.Success)
+            {
+                int idx = sec.Index + sec.Length;
+                bool empty = dj.Substring(idx).TrimStart().StartsWith("]");
+                dj = dj.Insert(idx, entry + (empty ? "" : ","));
+            }
+            else
+            {
+                int brace = dj.IndexOf('{');
+                bool emptyObj = dj.Substring(brace + 1).TrimStart().StartsWith("}");
+                dj = dj.Insert(brace + 1, "\"" + sid + "\":[" + entry + "]" + (emptyObj ? "" : ","));
+            }
+            File.WriteAllText(DossierPath(), dj);
+            StaffLog("ajoute une note au dossier " + sid);
+            return "{\"ok\":true}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    private string ApiSteamKey(string body)
+    {
+        string key = Json.GetString(body, "key", "").Trim();
+        if (key.Length > 0 && !Regex.IsMatch(key, "^[A-Fa-f0-9]{32}$"))
+        {
+            return "{\"error\":\"format de clé invalide (32 caractères hexadécimaux)\"}";
+        }
+        try
+        {
+            config.steamApiKey = key;
+            File.WriteAllText(Path.Combine(pluginDir, "config.json"), TKWebPanelConfig.ToJson(config));
+            lock (steamLock)
+            {
+                steamCache.Clear();
+                steamCacheTime.Clear();
+            }
+            StaffLog(key.Length > 0 ? "configure la clé API Steam" : "supprime la clé API Steam");
+            return "{\"ok\":true,\"set\":" + (key.Length > 0 ? "true" : "false") + "}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
     private void StartIdentityLogger()
     {
         LoadIdentities();
@@ -5515,6 +5807,9 @@ public class TKWebPanelConfig
     public bool ansiColors = true;
     // URL publique complète affichée dans la bannière (ex. https://nova-life.teamkit.fr/vizu/)
     public string publicUrl = "";
+    // Clé API Steam (steamcommunity.com/dev/apikey) : active les heures de
+    // jeu Nova-Life et l'âge des comptes dans les fiches. Vide = désactivé.
+    public string steamApiKey = "";
     // Conservation des historiques chat + journal d'activité (jours, min 92 = 3 mois)
     public int logRetentionDays = 92;
     // Intervalle de la sauvegarde automatique de la base (heures)
@@ -5532,6 +5827,7 @@ public class TKWebPanelConfig
         sb.AppendLine("  \"ansiColors\": " + (c.ansiColors ? "true" : "false") + ",");
         sb.AppendLine("  \"publicUrl\": " + Json.Str(c.publicUrl) + ",");
         sb.AppendLine("  \"logRetentionDays\": " + c.logRetentionDays + ",");
+        sb.AppendLine("  \"steamApiKey\": " + Json.Str(c.steamApiKey) + ",");
         sb.AppendLine("  \"backupIntervalHours\": " + c.backupIntervalHours);
         sb.AppendLine("}");
         return sb.ToString();
@@ -5552,6 +5848,7 @@ public class TKWebPanelConfig
         c.ansiColors = Json.GetBool(json, "ansiColors", c.ansiColors);
         c.publicUrl = Json.GetString(json, "publicUrl", c.publicUrl);
         c.logRetentionDays = Json.GetInt(json, "logRetentionDays", c.logRetentionDays);
+        c.steamApiKey = Json.GetString(json, "steamApiKey", c.steamApiKey);
         if (c.logRetentionDays < 92) c.logRetentionDays = 92;
         c.backupIntervalHours = Json.GetInt(json, "backupIntervalHours", c.backupIntervalHours);
         if (c.backupIntervalHours < 1) c.backupIntervalHours = 1;
