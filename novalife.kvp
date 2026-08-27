@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=96
-Meta.ReleaseNotes=TKDynamicFps v1.3 : allegement du thread principal (mesure sature a 100 pour cent) - physicsHz 40 (au lieu de 50) et solverIterations 4 (au lieu de 6), appliques a chaud, reversibles (0 = defaut Unity).
+Meta.ConfigVersion=97
+Meta.ReleaseNotes=Nouveau plugin TKPerf v1.0 : optimiseur headless - arrete les particules (purement visuelles), desactive l audio (pas de carte son), endort la physique immobile plus vite ; scan periodique avec rapport, tout configurable a chaud.
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]
