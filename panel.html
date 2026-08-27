@@ -724,7 +724,7 @@ function fmtDate(u){ return u>0 ? new Date(u*1000).toLocaleString('fr-FR') : '�
 function openIdentity(steamId, pseudo){
   api('identity?steamId=' + encodeURIComponent(steamId)).then(function(r){
     if(r.error){ toast(r.error, true); return; }
-    var h = '<h3>🔎 ' + esc(pseudo || steamId) + '</h3>' +
+    var h = '<h3>🔎 ' + esc(pseudo || steamId) + (r.chars ? ' <span class="muted" style="font-weight:400;font-size:13px">— ' + esc(r.chars) + '</span>' : '') + '</h3>' +
       '<p class="muted mono" style="font-size:12px">SteamID ' + esc(steamId) + '</p>';
     if(!r.ips.length){ h += '<p class="muted">Aucune IP enregistrée (le joueur doit s’être connecté depuis l’activation du journal).</p>'; }
     else {
@@ -747,9 +747,10 @@ function openIdentityIp(ip){
     if(!r.accounts.length){ h += '<p class="muted">Aucun compte enregistré sur cette IP.</p>'; }
     else {
       h += '<p class="muted" style="font-size:12px">' + r.accounts.length + ' compte(s) vu(s) depuis cette IP' + (r.accounts.length>1 ? ' — possibles alts / même foyer' : '') + '</p>';
-      h += '<div class="tblwrap"><table><thead><tr><th>Compte</th><th>SteamID</th><th>1re fois</th><th>Dernière</th></tr></thead><tbody>';
+      h += '<div class="tblwrap"><table><thead><tr><th>Compte</th><th>Personnage</th><th>SteamID</th><th>1re fois</th><th>Dernière</th></tr></thead><tbody>';
       r.accounts.sort(function(a,b){ return b.last - a.last; }).forEach(function(a){
         h += '<tr><td><a href="#" onclick="openIdentity(\'' + a.steamId + '\',\'' + esc(a.username||'') + '\');return false">' + esc(a.username||'?') + '</a></td>' +
+          '<td>' + (a.chars ? esc(a.chars) : '<span class="muted">—</span>') + '</td>' +
           '<td class="mono">' + esc(a.steamId) + '</td><td>' + fmtDate(a.first) + '</td><td>' + fmtDate(a.last) + '</td></tr>';
       });
       h += '</tbody></table></div>';

@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.12.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.13 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -5571,8 +5571,39 @@ public class TKWebPanel : Plugin
         Debug.Log("[TKWEB] Journal identité IP<->SteamID actif");
     }
 
+    // Noms de personnages RP par SteamId (tous les persos d'un compte).
+    private Dictionary<string, string> LoadCharNames(string onlySid)
+    {
+        Dictionary<string, string> map = new Dictionary<string, string>();
+        try
+        {
+            SQLite.SQLiteConnection cdb = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+            try
+            {
+                string q = "SELECT a.SteamId AS SteamId, c.Firstname AS Firstname, c.Lastname AS Lastname "
+                    + "FROM Characters c JOIN Accounts a ON a.Id = c.AccountId";
+                if (!string.IsNullOrEmpty(onlySid))
+                {
+                    q += " WHERE a.SteamId = '" + onlySid.Replace("'", "") + "'";
+                }
+                foreach (CharNameRow cr in cdb.Query<CharNameRow>(q))
+                {
+                    if (cr == null || string.IsNullOrEmpty(cr.SteamId)) continue;
+                    string full = ((cr.Firstname ?? "") + " " + (cr.Lastname ?? "")).Trim();
+                    if (full.Length == 0) continue;
+                    string ex;
+                    map[cr.SteamId] = map.TryGetValue(cr.SteamId, out ex) ? ex + ", " + full : full;
+                }
+            }
+            finally { cdb.Close(); }
+        }
+        catch { }
+        return map;
+    }
+
     private string ApiIdentity(string steamId, string ip)
     {
+        Dictionary<string, string> chars = LoadCharNames(string.IsNullOrEmpty(ip) ? (steamId ?? "").Trim() : null);
         lock (identLock)
         {
             if (!string.IsNullOrEmpty(ip))
@@ -5586,8 +5617,11 @@ public class TKWebPanel : Plugin
                     if (!kv.Value.ips.TryGetValue(want, out e)) continue;
                     if (!first) sb.Append(",");
                     first = false;
+                    string cn1;
+                    chars.TryGetValue(kv.Key, out cn1);
                     sb.Append("{\"steamId\":").Append(Json.Str(kv.Key));
                     sb.Append(",\"username\":").Append(Json.Str(kv.Value.name ?? ""));
+                    sb.Append(",\"chars\":").Append(Json.Str(cn1 ?? ""));
                     sb.Append(",\"first\":").Append(e.first).Append(",\"last\":").Append(e.last).Append("}");
                 }
                 sb.Append("]}");
@@ -5599,7 +5633,9 @@ public class TKWebPanel : Plugin
             {
                 return "{\"steamId\":" + Json.Str(sid) + ",\"username\":\"\",\"ips\":[]}";
             }
-            StringBuilder sb2 = new StringBuilder("{\"steamId\":" + Json.Str(sid) + ",\"username\":" + Json.Str(id.name ?? "") + ",\"ips\":[");
+            string cnMain;
+            chars.TryGetValue(sid, out cnMain);
+            StringBuilder sb2 = new StringBuilder("{\"steamId\":" + Json.Str(sid) + ",\"username\":" + Json.Str(id.name ?? "") + ",\"chars\":" + Json.Str(cnMain ?? "") + ",\"ips\":[");
             bool f2 = true;
             foreach (KeyValuePair<string, IdentIp> ipkv in id.ips)
             {
