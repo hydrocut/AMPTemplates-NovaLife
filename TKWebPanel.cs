@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.11.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.12 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -713,6 +713,7 @@ public class TKWebPanel : Plugin
             case "/api/banip":
             case "/api/banipraw":
             case "/api/serverlog":
+            case "/api/suspects":
             case "/api/dossier":
             case "/api/dossiernote":
             case "/api/steamkey":
@@ -873,6 +874,8 @@ public class TKWebPanel : Plugin
                 return ApiBanIpRaw(body);
             case "/api/serverlog":
                 return ApiServerLog(body);
+            case "/api/suspects":
+                return ApiSuspects();
             case "/api/steaminfo":
                 return ApiSteamInfo(body);
             case "/api/playtime":
@@ -4695,6 +4698,146 @@ public class TKWebPanel : Plugin
             {
             }
         };
+    }
+
+    // ------------------------------------------------------------------
+    // Comptes suspects (v3.12) : croisement du journal d'identités et des
+    // bans en base. IP partagée par plusieurs SteamID = alts possibles ;
+    // si l'un est banni et pas l'autre = évasion de ban probable.
+    private class SuspectBan { public string user; public string reason; }
+
+    private string ApiSuspects()
+    {
+        Dictionary<string, SuspectBan> banned = new Dictionary<string, SuspectBan>();
+        try
+        {
+            SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
+            try
+            {
+                foreach (BanRow r in conn.Query<BanRow>(
+                    "SELECT SteamId, Username, BanReason FROM Accounts WHERE BanTimestamp > 0 OR (BanReason IS NOT NULL AND BanReason != '')"))
+                {
+                    if (r != null && !string.IsNullOrEmpty(r.SteamId))
+                    {
+                        banned[r.SteamId] = new SuspectBan { user = r.Username ?? "?", reason = r.BanReason ?? "?" };
+                    }
+                }
+            }
+            finally
+            {
+                conn.Close();
+            }
+        }
+        catch
+        {
+        }
+        Dictionary<string, List<string>> byIp = new Dictionary<string, List<string>>();
+        Dictionary<string, List<string>> sidIps = new Dictionary<string, List<string>>();
+        Dictionary<string, string> nm = new Dictionary<string, string>();
+        lock (identLock)
+        {
+            foreach (KeyValuePair<string, Ident> kv in identities)
+            {
+                if (!string.IsNullOrEmpty(kv.Value.name))
+                {
+                    nm[kv.Key] = kv.Value.name;
+                }
+                List<string> ipl;
+                if (!sidIps.TryGetValue(kv.Key, out ipl))
+                {
+                    ipl = new List<string>();
+                    sidIps[kv.Key] = ipl;
+                }
+                foreach (KeyValuePair<string, IdentIp> ip in kv.Value.ips)
+                {
+                    ipl.Add(ip.Key);
+                    List<string> l;
+                    if (!byIp.TryGetValue(ip.Key, out l))
+                    {
+                        l = new List<string>();
+                        byIp[ip.Key] = l;
+                    }
+                    if (!l.Contains(kv.Key))
+                    {
+                        l.Add(kv.Key);
+                    }
+                }
+            }
+        }
+        Func<string, string> nameOf = delegate (string sid)
+        {
+            string v;
+            if (nm.TryGetValue(sid, out v) && !string.IsNullOrEmpty(v)) return v;
+            SuspectBan b;
+            if (banned.TryGetValue(sid, out b)) return b.user;
+            return "?";
+        };
+        // 1) IP partagées
+        List<string> shared = new List<string>();
+        foreach (KeyValuePair<string, List<string>> kv in byIp)
+        {
+            if (kv.Value.Count < 2)
+            {
+                continue;
+            }
+            bool anyBan = false, anyClean = false;
+            List<string> accs = new List<string>();
+            foreach (string sid in kv.Value)
+            {
+                bool isBan = banned.ContainsKey(sid);
+                if (isBan) anyBan = true; else anyClean = true;
+                accs.Add("{\"sid\":\"" + sid + "\",\"name\":" + Json.Str(nameOf(sid))
+                    + ",\"banned\":" + (isBan ? "true" : "false")
+                    + ",\"reason\":" + Json.Str(isBan ? banned[sid].reason : "") + "}");
+            }
+            shared.Add("{\"ip\":" + Json.Str(kv.Key) + ",\"evasion\":" + (anyBan && anyClean ? "true" : "false")
+                + ",\"accounts\":[" + string.Join(",", accs.ToArray()) + "]}");
+        }
+        // 2) comptes multi-IP (3+)
+        List<string> multi = new List<string>();
+        foreach (KeyValuePair<string, List<string>> kv in sidIps)
+        {
+            if (kv.Value.Count < 3)
+            {
+                continue;
+            }
+            List<string> ipsj = new List<string>();
+            foreach (string ip in kv.Value)
+            {
+                ipsj.Add(Json.Str(ip));
+            }
+            multi.Add("{\"sid\":\"" + kv.Key + "\",\"name\":" + Json.Str(nameOf(kv.Key))
+                + ",\"banned\":" + (banned.ContainsKey(kv.Key) ? "true" : "false")
+                + ",\"ips\":[" + string.Join(",", ipsj.ToArray()) + "]}");
+        }
+        // 3) bannis vus au journal
+        List<string> seen = new List<string>();
+        foreach (KeyValuePair<string, SuspectBan> kv in banned)
+        {
+            List<string> ipl;
+            if (!sidIps.TryGetValue(kv.Key, out ipl) || ipl.Count == 0)
+            {
+                continue;
+            }
+            List<string> ipsj = new List<string>();
+            foreach (string ip in ipl)
+            {
+                ipsj.Add(Json.Str(ip));
+            }
+            seen.Add("{\"sid\":\"" + kv.Key + "\",\"name\":" + Json.Str(kv.Value.user)
+                + ",\"reason\":" + Json.Str(kv.Value.reason)
+                + ",\"ips\":[" + string.Join(",", ipsj.ToArray()) + "]}");
+        }
+        return "{\"shared\":[" + string.Join(",", shared.ToArray())
+            + "],\"multi\":[" + string.Join(",", multi.ToArray())
+            + "],\"bannedSeen\":[" + string.Join(",", seen.ToArray()) + "]}";
+    }
+
+    private class BanRow
+    {
+        public string SteamId { get; set; }
+        public string Username { get; set; }
+        public string BanReason { get; set; }
     }
 
     private string ApiServerLog(string body)

@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=92
-Meta.ReleaseNotes=TKAntiCheat v1.11 : anti-fly vehicule - raycast sous le vehicule occupe (la carte est chargee cote serveur), suspendu a plus de 25 m au-dessus de tout support pendant 5 s sans chuter = alerte VOL-VHC. Sauts, ponts et chutes absorbes.
+Meta.ConfigVersion=93
+Meta.ReleaseNotes=Panel v3.12 : section Comptes suspects (owner) - IP partagees par plusieurs comptes avec detection d evasion de ban, comptes multi-IP, bannis vus au journal avec leurs IP, tout cliquable.
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]

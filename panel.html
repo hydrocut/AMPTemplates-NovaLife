@@ -549,6 +549,11 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </div>
     <div id="slog-box" class="mono" style="max-height:420px;overflow:auto;border:1px solid var(--line,#2a3142);border-radius:8px;padding:10px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word"><span class="muted">Chargement…</span></div>
   </section>
+
+  <section data-tab="securite" class="need-owner">
+    <h2>Comptes suspects <span class="muted" style="font-weight:400;font-size:12px">— alts, IP partagées, évasion de ban (croisement journal d'identités × bans)</span></h2>
+    <div id="suspects"><span class="muted">Chargement…</span></div>
+  </section>
   <section data-tab="admins" class="need-owner">
     <h2>Comptes du panel <span class="muted" style="font-weight:400;font-size:12px">— accès web admin/modo, gérés par le propriétaire</span></h2>
     <div class="row" style="margin-bottom:12px">
@@ -1079,6 +1084,43 @@ function notifyAreaOwner(areaId){
 }
 
 var slogTimer = null;
+function loadSuspects(){
+  api('suspects').then(function(r){
+    var b = document.getElementById('suspects');
+    if(!b) return;
+    if(r.error){ b.innerHTML = '<span class="muted">' + esc(r.error) + '</span>'; return; }
+    var h2 = '';
+    var ev = (r.shared || []).filter(function(x){ return x.evasion; });
+    var sh = (r.shared || []).filter(function(x){ return !x.evasion; });
+    if(ev.length){
+      h2 += '<h3 style="font-size:13px;color:#ff7b72;margin:6px 0 4px">🚨 Évasion de ban probable</h3>';
+      h2 += ev.map(function(x){
+        return '<div style="margin:4px 0;padding:8px;border:1px solid #ff7b7244;border-radius:8px">IP <a href="#" class="slink mono" onclick="openIdentityIp(\'' + esc(x.ip) + '\');return false">' + esc(x.ip) + '</a> partagée par : ' +
+          x.accounts.map(function(a){ return slinkSteam(a.sid, a.name) + (a.banned ? ' <span class="badge" style="background:#ff7b7222;color:#ff7b72">BANNI · ' + esc(a.reason || '?') + '</span>' : ' <span class="badge" style="background:#3fb95022;color:#3fb950">actif</span>'); }).join(' · ') + '</div>';
+      }).join('');
+    }
+    if(sh.length){
+      h2 += '<h3 style="font-size:13px;margin:10px 0 4px">👥 IP partagées (alts possibles — ou simple famille/coloc)</h3>';
+      h2 += sh.map(function(x){
+        return '<div style="margin:3px 0">IP <a href="#" class="slink mono" onclick="openIdentityIp(\'' + esc(x.ip) + '\');return false">' + esc(x.ip) + '</a> : ' +
+          x.accounts.map(function(a){ return slinkSteam(a.sid, a.name); }).join(' · ') + '</div>';
+      }).join('');
+    }
+    if((r.multi || []).length){
+      h2 += '<h3 style="font-size:13px;margin:10px 0 4px">🌐 Comptes à 3+ IP (partage de compte / VPN)</h3>';
+      h2 += r.multi.map(function(x){
+        return '<div style="margin:3px 0">' + slinkSteam(x.sid, x.name) + (x.banned ? ' <span class="badge" style="background:#ff7b7222;color:#ff7b72">BANNI</span>' : '') + ' : ' + x.ips.length + ' IP — ' + x.ips.slice(0, 6).map(function(ip){ return '<a href="#" class="slink mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>'; }).join(', ') + '</div>';
+      }).join('');
+    }
+    if((r.bannedSeen || []).length){
+      h2 += '<h3 style="font-size:13px;margin:10px 0 4px">🚫 Bannis vus au journal — leurs IP à surveiller</h3>';
+      h2 += r.bannedSeen.map(function(x){
+        return '<div style="margin:3px 0">' + slinkSteam(x.sid, x.name) + ' <span class="muted" style="font-size:12px">[' + esc(x.reason || '?') + ']</span> : ' + x.ips.map(function(ip){ return '<a href="#" class="slink mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>'; }).join(', ') + '</div>';
+      }).join('');
+    }
+    b.innerHTML = h2 || '<span class="muted">Rien de suspect pour le moment 👌</span>';
+  }).catch(function(){});
+}
 function loadServerLog(){
   var day = document.getElementById('slog-day').value;
   var q = document.getElementById('slog-q').value.trim();
@@ -1448,7 +1490,7 @@ function showTab(name){
   if(name === 'comptes'){ var ndi = document.getElementById('np-days'); if(ndi && localStorage.getItem('tkweb_npdays')) ndi.value = localStorage.getItem('tkweb_npdays'); loadNewPlayers(); }
   if(name === 'carte'){ initMap(); api('mapcalib').then(function(c){ if(!c.error){ mapCal = c; renderMapDots(); } }).catch(function(){}); renderMapDots(); pollMapVehicles(); }
   if(name === 'classement') loadRankings();
-  if(name === 'securite'){ if(myLevel() >= 3){ loadAcConfig(); loadServerLog(); } markAlertsSeen(); }
+  if(name === 'securite'){ if(myLevel() >= 3){ loadAcConfig(); loadServerLog(); loadSuspects(); } markAlertsSeen(); }
   if(name === 'chat') chatScrollBottom();
 }
 
