@@ -46,6 +46,9 @@ public class TKAntiCheat : Plugin
         public bool hasPos;
         public int overSpeedStreak;
         public int vehSpeedStreak;
+        public int flyStreak;
+        public float lastY;
+        public float lastFlyAlert;
         public float ignoreUntil; // téléport légitime : on ignore la vitesse un instant
     }
 
@@ -66,7 +69,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.10.2 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.11 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -84,7 +87,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.10.2 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.11 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -680,6 +683,48 @@ public class TKAntiCheat : Plugin
     }
 
     // Appelé par le ticker sur le thread principal
+    // Anti-fly : le véhicule occupé plane-t-il au-dessus de tout support ?
+    // Raycast vers le bas (la carte et ses colliders sont chargés côté
+    // serveur). En chute libre la hauteur diminue vite -> on ne compte que
+    // les relevés où l'altitude est stable ou monte (deltaY > -3 m/s),
+    // signature d'un fly hack et pas d'un saut ou d'une chute.
+    private void CheckFly(Player p, Track t, Vector3 pos, float dt, float now)
+    {
+        if (config == null || !config.flyCheck)
+        {
+            return;
+        }
+        float deltaY = (pos.y - t.lastY) / (dt > 0.01f ? dt : 1f);
+        t.lastY = pos.y;
+        bool airborne;
+        RaycastHit hit;
+        if (Physics.Raycast(pos + Vector3.up * 1.5f, Vector3.down, out hit, config.flyHeight + 1.5f))
+        {
+            airborne = false; // un support existe sous le véhicule
+        }
+        else
+        {
+            airborne = true; // rien sous le véhicule sur flyHeight mètres
+        }
+        if (airborne && deltaY > -3f)
+        {
+            t.flyStreak++;
+            if (t.flyStreak >= config.flySeconds && now - t.lastFlyAlert >= 30f)
+            {
+                t.lastFlyAlert = now;
+                t.flyStreak = 0;
+                Alert("VOL-VHC", SafePseudo(p), p.steamId,
+                    "véhicule suspendu à plus de " + config.flyHeight.ToString("0")
+                    + " m au-dessus de tout support depuis " + config.flySeconds
+                    + " s (alt. " + pos.y.ToString("0") + ") — fly hack probable");
+            }
+        }
+        else
+        {
+            t.flyStreak = 0;
+        }
+    }
+
     public void CheckSpeeds(float now)
     {
         if (Nova.server == null)
@@ -743,6 +788,7 @@ public class TKAntiCheat : Plugin
                 {
                     t.vehSpeedStreak = 0;
                 }
+                CheckFly(p, t, pos, dt, now);
                 continue;
             }
             t.vehSpeedStreak = 0;
@@ -1387,6 +1433,12 @@ public class TKAntiCheatConfig
     // Vitesse max tolérée EN véhicule (m/s). 70 m/s = 252 km/h, au-dessus
     // de tout véhicule légitime du jeu ; détecte les speed boosts injectés.
     public float maxVehicleSpeed = 70f;
+    // Anti-fly véhicule : altitude au-dessus de tout support (raycast) qui
+    // déclenche, et nombre de relevés consécutifs exigés (1 relevé/s).
+    // Les sauts, tremplins et ponts passent largement sous ces seuils.
+    public bool flyCheck = true;
+    public float flyHeight = 25f;
+    public int flySeconds = 5;
     // Bond de distance en un relevé = téléport manifeste (m)
     public float teleportDistance = 120f;
     // Grâce après connexion/mort/spawn (s) : on ne juge pas la vitesse
@@ -1467,6 +1519,9 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"moneyAlertThreshold\": " + c.moneyAlertThreshold.ToString("0") + ",");
         sb.AppendLine("  \"maxSpeed\": " + c.maxSpeed.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"maxVehicleSpeed\": " + c.maxVehicleSpeed.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
+        sb.AppendLine("  \"flyCheck\": " + (c.flyCheck ? "true" : "false") + ",");
+        sb.AppendLine("  \"flyHeight\": " + c.flyHeight.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
+        sb.AppendLine("  \"flySeconds\": " + c.flySeconds + ",");
         sb.AppendLine("  \"teleportDistance\": " + c.teleportDistance.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"teleportGraceSeconds\": " + c.teleportGraceSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"itemAlertQuantity\": " + c.itemAlertQuantity + ",");
@@ -1520,6 +1575,11 @@ public class TKAntiCheatConfig
         c.moneyAlertThreshold = GetDouble(json, "moneyAlertThreshold", c.moneyAlertThreshold);
         c.maxSpeed = (float)GetDouble(json, "maxSpeed", c.maxSpeed);
         c.maxVehicleSpeed = (float)GetDouble(json, "maxVehicleSpeed", c.maxVehicleSpeed);
+        c.flyCheck = GetBool(json, "flyCheck", c.flyCheck);
+        c.flyHeight = (float)GetDouble(json, "flyHeight", c.flyHeight);
+        if (c.flyHeight < 8f) c.flyHeight = 8f;
+        c.flySeconds = (int)GetDouble(json, "flySeconds", c.flySeconds);
+        if (c.flySeconds < 3) c.flySeconds = 3;
         c.teleportDistance = (float)GetDouble(json, "teleportDistance", c.teleportDistance);
         c.teleportGraceSeconds = (float)GetDouble(json, "teleportGraceSeconds", c.teleportGraceSeconds);
         c.itemAlertQuantity = (int)GetDouble(json, "itemAlertQuantity", c.itemAlertQuantity);
