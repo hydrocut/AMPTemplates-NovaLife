@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=90
-Meta.ReleaseNotes=TKAntiCheat v1.10.2 : detecteur MOD-CLIENT - un hash de commande inconnu envoye de facon repetee par 1-2 joueurs seulement = mod client injecte (MelonLoader), alerte attribuee ; emis par presque tous = plugin desynchronise (FastDL), silencieux.
+Meta.ConfigVersion=91
+Meta.ReleaseNotes=Panel v3.11.1 : les deux nouveaux reglages anti-cheat dans l interface - Vigie commandes sensibles (anti MelonLoader) et Alertes CRASH detaillees (diagnostic contagion NaN).
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]
