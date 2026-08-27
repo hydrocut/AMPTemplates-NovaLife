@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.13 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.13.1 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -3648,6 +3648,8 @@ public class TKWebPanel : Plugin
             sb.Append(",\"crashGuardKick\":").Append(Json.GetBool(json, "crashGuardKick", false) ? "true" : "false");
             sb.Append(",\"crashGuardAlert\":").Append(Json.GetBool(json, "crashGuardAlert", false) ? "true" : "false");
             sb.Append(",\"sensibleWatch\":").Append(Json.GetBool(json, "sensibleWatch", true) ? "true" : "false");
+            sb.Append(",\"vpnCheck\":").Append(Json.GetBool(json, "vpnCheck", true) ? "true" : "false");
+            sb.Append(",\"vpnKick\":").Append(Json.GetBool(json, "vpnKick", false) ? "true" : "false");
             sb.Append(",\"enabled\":").Append(Json.GetBool(json, "enabled", true) ? "true" : "false");
             sb.Append(",\"moneyThreshold\":").Append(Json.GetInt(json, "moneyAlertThreshold", 500000));
             sb.Append(",\"maxSpeed\":").Append(Json.GetInt(json, "maxSpeed", 30));
@@ -3666,7 +3668,7 @@ public class TKWebPanel : Plugin
     {
         string key = Json.GetString(body, "key", "");
         bool value = Json.GetBool(body, "value", false);
-        string[] allowed = { "adminProtection", "adminAutoReset", "adminKick", "spamEnabled", "spamKick", "enabled", "spoofCheck", "spoofKick", "adminIpGuard", "adminIpKick", "menuShield", "menuShieldKick", "crashGuard", "crashGuardKick", "crashGuardAlert", "sensibleWatch" };
+        string[] allowed = { "adminProtection", "adminAutoReset", "adminKick", "spamEnabled", "spamKick", "enabled", "spoofCheck", "spoofKick", "adminIpGuard", "adminIpKick", "menuShield", "menuShieldKick", "crashGuard", "crashGuardKick", "crashGuardAlert", "sensibleWatch", "vpnCheck", "vpnKick" };
         if (Array.IndexOf(allowed, key) < 0)
         {
             return "{\"error\":\"réglage inconnu\"}";

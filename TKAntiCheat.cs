@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Net;
+using System.Threading;
 using Life;
 using Life.Network;
 using Mirror;
@@ -69,7 +71,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.11.2 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.12 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -87,7 +89,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.11.2 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.12 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -103,7 +105,7 @@ public class TKAntiCheat : Plugin
             Nova.server.OnPlayerBankEvent += delegate (Player p, double amount, string reason) { OnMoney(p, amount, reason, true); };
             Nova.server.OnPlayerReceiveItemEvent += delegate (Player p, int itemId, int slotId, int number) { OnItem(p, itemId, number); };
             Nova.server.OnPlayerUseCommandEvent += delegate (Player p, SChatCommand cmd) { OnActivity(p, true); };
-            Nova.server.OnPlayerConnectEvent += delegate (Player p) { MarkTeleport(p); };
+            Nova.server.OnPlayerConnectEvent += delegate (Player p) { MarkTeleport(p); QueueVpnCheck(p); };
             Nova.server.OnPlayerSpawnCharacterEvent += delegate (Player p) { MarkTeleport(p); };
             Nova.server.OnPlayerDeathEvent += delegate (Player p) { MarkTeleport(p); };
             hooked = true;
@@ -545,6 +547,166 @@ public class TKAntiCheat : Plugin
         }
         catch
         {
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Détecteur VPN/proxy/datacenter (v1.12). À la connexion, on interroge
+    // ip-api.com en tâche de fond (pas de blocage du thread principal) et
+    // on met le résultat en cache disque. proxy/hosting=true -> alerte +
+    // kick optionnel. TrustProxy : la requête ne part QUE pour une IP
+    // publique jamais vue, jamais pour les admins ni la liste blanche.
+    private readonly Dictionary<string, bool> vpnCache = new Dictionary<string, bool>();
+    private readonly HashSet<string> vpnPending = new HashSet<string>();
+    private readonly List<ulong> vpnFlagQueue = new List<ulong>();
+    private readonly object vpnLock = new object();
+    private bool vpnLoaded;
+
+    private string VpnCachePath() { return Path.Combine(pluginDir, "vpncache.tsv"); }
+
+    private void LoadVpnCache()
+    {
+        if (vpnLoaded) return;
+        vpnLoaded = true;
+        try
+        {
+            if (!File.Exists(VpnCachePath())) return;
+            foreach (string line in File.ReadAllLines(VpnCachePath()))
+            {
+                string[] pr = line.Split('\t');
+                if (pr.Length >= 2) vpnCache[pr[0]] = pr[1] == "1";
+            }
+        }
+        catch { }
+    }
+
+    private bool VpnWhitelisted(string ip)
+    {
+        if (string.IsNullOrEmpty(config.vpnWhitelist)) return false;
+        foreach (string raw in config.vpnWhitelist.Split(','))
+        {
+            string q = raw.Trim();
+            if (q.Length > 0 && ip.StartsWith(q)) return true;
+        }
+        return false;
+    }
+
+    private void QueueVpnCheck(Player p)
+    {
+        if (config == null || !config.vpnCheck || p == null || IsAdmin(p)) return;
+        string ip = GetIp(p);
+        if (string.IsNullOrEmpty(ip) || ip == "127.0.0.1" || ip.StartsWith("10.")
+            || ip.StartsWith("192.168.") || ip.StartsWith("172.") || VpnWhitelisted(ip))
+        {
+            return;
+        }
+        ulong sid = p.steamId;
+        bool cached, hasCache;
+        lock (vpnLock)
+        {
+            LoadVpnCache();
+            hasCache = vpnCache.TryGetValue(ip, out cached);
+            if (!hasCache)
+            {
+                if (vpnPending.Contains(ip)) return; // déjà en cours
+                vpnPending.Add(ip);
+            }
+        }
+        if (hasCache)
+        {
+            if (cached) { lock (vpnLock) { vpnFlagQueue.Add(sid); } }
+            return;
+        }
+        Thread t = new Thread(delegate ()
+        {
+            bool isVpn = QueryVpn(ip);
+            lock (vpnLock)
+            {
+                vpnCache[ip] = isVpn;
+                vpnPending.Remove(ip);
+                try { File.AppendAllText(VpnCachePath(), ip + "\t" + (isVpn ? "1" : "0") + "\n"); } catch { }
+            }
+            if (isVpn)
+            {
+                lock (vpnLock) { vpnFlagQueue.Add(sid); }
+            }
+        });
+        t.IsBackground = true;
+        t.Start();
+    }
+
+    // Interroge ip-api.com (gratuit, 45 req/min, sans clé). Renvoie true si
+    // l'IP est un proxy/VPN (ou de l'hébergement si vpnBlockHosting).
+    private bool QueryVpn(string ip)
+    {
+        try
+        {
+            string url = "http://ip-api.com/json/" + ip + "?fields=proxy,hosting,status";
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+            req.Timeout = 6000;
+            req.UserAgent = "TKAntiCheat";
+            using (WebResponse resp = req.GetResponse())
+            using (StreamReader sr = new StreamReader(resp.GetResponseStream()))
+            {
+                string body = sr.ReadToEnd();
+                bool proxy = Regex.IsMatch(body, "\"proxy\"\\s*:\\s*true");
+                bool hosting = Regex.IsMatch(body, "\"hosting\"\\s*:\\s*true");
+                return proxy || (config.vpnBlockHosting && hosting);
+            }
+        }
+        catch
+        {
+            return false; // en cas d'échec API : on ne bloque jamais
+        }
+    }
+
+    // Draine la file des IP VPN detectees (appele par le ticker, thread principal).
+    public void ProcessVpnFlags()
+    {
+        List<ulong> todo = null;
+        lock (vpnLock)
+        {
+            if (vpnFlagQueue.Count == 0) return;
+            todo = new List<ulong>(vpnFlagQueue);
+            vpnFlagQueue.Clear();
+        }
+        foreach (ulong sid in todo)
+        {
+            try { FlagVpn(sid, GetIpBySid(sid)); } catch { }
+        }
+    }
+
+    private string GetIpBySid(ulong sid)
+    {
+        try
+        {
+            foreach (Player pl in Nova.server.GetAllPlayers())
+            {
+                if (pl != null && pl.steamId == sid) return GetIp(pl);
+            }
+        }
+        catch { }
+        return "?";
+    }
+
+    private void FlagVpn(ulong sid, string ip)
+    {
+        Player p = null;
+        try
+        {
+            foreach (Player pl in Nova.server.GetAllPlayers())
+            {
+                if (pl != null && pl.steamId == sid) { p = pl; break; }
+            }
+        }
+        catch { }
+        if (p == null || IsAdmin(p)) return;
+        bool kick = config.vpnKick;
+        Alert("VPN", SafePseudo(p), sid, "connecté via VPN/proxy/datacenter (" + ip + ")"
+            + (kick ? " — kick" : " — surveiller"));
+        if (kick)
+        {
+            try { p.Disconnect("VPN/proxy non autorisé — connecte-toi avec ta vraie connexion"); } catch { }
         }
     }
 
@@ -1478,6 +1640,7 @@ public class TKAntiCheatTicker : MonoBehaviour
         try
         {
             plugin.TryInstallMenuShield();
+            plugin.ProcessVpnFlags();
             plugin.CheckSpeeds(now);
             plugin.CheckAdmins(now);
             plugin.CheckSpoof(now);
@@ -1503,6 +1666,11 @@ public class TKAntiCheatConfig
     // Anti-fly véhicule : altitude au-dessus de tout support (raycast) qui
     // déclenche, et nombre de relevés consécutifs exigés (1 relevé/s).
     // Les sauts, tremplins et ponts passent largement sous ces seuils.
+    // Détecteur VPN/proxy/datacenter (via ip-api.com, gratuit sans clé).
+    public bool vpnCheck = true;
+    public bool vpnKick = false;              // kick auto si VPN détecté
+    public bool vpnBlockHosting = true;       // traiter aussi l'hébergement/datacenter comme VPN
+    public string vpnWhitelist = "";          // IP ou préfixes exemptés (virgules)
     public bool flyCheck = true;
     public float flyHeight = 25f;
     public int flySeconds = 5;
@@ -1589,6 +1757,10 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"moneyAlertThreshold\": " + c.moneyAlertThreshold.ToString("0") + ",");
         sb.AppendLine("  \"maxSpeed\": " + c.maxSpeed.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"maxVehicleSpeed\": " + c.maxVehicleSpeed.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
+        sb.AppendLine("  \"vpnCheck\": " + (c.vpnCheck ? "true" : "false") + ",");
+        sb.AppendLine("  \"vpnKick\": " + (c.vpnKick ? "true" : "false") + ",");
+        sb.AppendLine("  \"vpnBlockHosting\": " + (c.vpnBlockHosting ? "true" : "false") + ",");
+        sb.AppendLine("  \"vpnWhitelist\": \"" + (c.vpnWhitelist ?? "").Replace("\\", "").Replace("\"", "") + "\",");
         sb.AppendLine("  \"flyCheck\": " + (c.flyCheck ? "true" : "false") + ",");
         sb.AppendLine("  \"flyHeight\": " + c.flyHeight.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"flySeconds\": " + c.flySeconds + ",");
@@ -1645,6 +1817,11 @@ public class TKAntiCheatConfig
         c.moneyAlertThreshold = GetDouble(json, "moneyAlertThreshold", c.moneyAlertThreshold);
         c.maxSpeed = (float)GetDouble(json, "maxSpeed", c.maxSpeed);
         c.maxVehicleSpeed = (float)GetDouble(json, "maxVehicleSpeed", c.maxVehicleSpeed);
+        c.vpnCheck = GetBool(json, "vpnCheck", c.vpnCheck);
+        c.vpnKick = GetBool(json, "vpnKick", c.vpnKick);
+        c.vpnBlockHosting = GetBool(json, "vpnBlockHosting", c.vpnBlockHosting);
+        Match vwm = Regex.Match(json, @"""vpnWhitelist""\s*:\s*""(?<v>[^""]*)""");
+        if (vwm.Success) c.vpnWhitelist = vwm.Groups["v"].Value;
         c.flyCheck = GetBool(json, "flyCheck", c.flyCheck);
         c.flyHeight = (float)GetDouble(json, "flyHeight", c.flyHeight);
         if (c.flyHeight < 8f) c.flyHeight = 8f;

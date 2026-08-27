@@ -2027,6 +2027,8 @@ function loadAcConfig(){
       sw('crashGuardKick', 'Kick auto crasher', c.crashGuardKick, '— éjecte l’auteur d’une tentative de crash') +
       sw('crashGuardAlert', 'Alertes CRASH détaillées', c.crashGuardAlert, '— attribution par joueur des paquets NaN (diagnostic : les victimes de la contagion en émettent aussi)') +
       sw('sensibleWatch', 'Vigie commandes sensibles', c.sensibleWatch, '— alerte quand un non-admin invoque give/spawn/tp/etc. (signature MelonLoader), sans blocage') +
+      sw('vpnCheck', 'Détecteur VPN / proxy', c.vpnCheck, '— vérifie chaque IP (ip-api.com) et alerte si VPN/proxy/datacenter — la source des crashers') +
+      sw('vpnKick', 'Kick auto VPN', c.vpnKick, '— refuse les connexions VPN/proxy (attention : bloque aussi les joueurs légitimes sous VPN)') +
       sw('enabled', 'Anti-cheat activé (global)', c.enabled, '') +
       '<div class="muted" style="margin-top:8px;font-size:12px">' + c.whitelistCount + ' admin(s) en liste blanche · argent alerte > ' + Number(c.moneyThreshold).toLocaleString('fr-FR') + ' · vitesse max ' + c.maxSpeed + ' m/s · modifs appliquées sous ~20 s</div>';
   }).catch(function(){});
