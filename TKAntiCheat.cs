@@ -89,7 +89,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.12.1 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.12.2 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -106,7 +106,7 @@ public class TKAntiCheat : Plugin
             Nova.server.OnPlayerReceiveItemEvent += delegate (Player p, int itemId, int slotId, int number) { OnItem(p, itemId, number); };
             Nova.server.OnPlayerUseCommandEvent += delegate (Player p, SChatCommand cmd) { OnActivity(p, true); };
             Nova.server.OnPlayerConnectEvent += delegate (Player p) { MarkTeleport(p); QueueVpnCheck(p); };
-            Nova.server.OnPlayerSpawnCharacterEvent += delegate (Player p) { MarkTeleport(p); };
+            Nova.server.OnPlayerSpawnCharacterEvent += delegate (Player p) { MarkTeleport(p); QueueVpnCheck(p); };
             Nova.server.OnPlayerDeathEvent += delegate (Player p) { MarkTeleport(p); };
             hooked = true;
             Debug.Log("[TKAC] Événements branchés (argent, items, connexion, spawn, mort)");
@@ -593,11 +593,32 @@ public class TKAntiCheat : Plugin
 
     private void QueueVpnCheck(Player p)
     {
-        if (config == null || !config.vpnCheck || p == null || IsAdmin(p)) return;
-        string ip = GetIp(p);
-        if (string.IsNullOrEmpty(ip) || ip == "127.0.0.1" || ip.StartsWith("10.")
-            || ip.StartsWith("192.168.") || ip.StartsWith("172.") || VpnWhitelisted(ip))
+        if (config == null || !config.vpnCheck)
         {
+            return;
+        }
+        if (p == null)
+        {
+            return;
+        }
+        if (IsAdmin(p))
+        {
+            Debug.Log("[TKAC] VPN : check ignoré (admin) pour " + p.steamId);
+            return;
+        }
+        string ip = GetIp(p);
+        if (string.IsNullOrEmpty(ip))
+        {
+            Debug.Log("[TKAC] VPN : check reporté (IP indisponible) pour " + p.steamId);
+            return;
+        }
+        if (ip == "127.0.0.1" || ip.StartsWith("10.") || ip.StartsWith("192.168.") || ip.StartsWith("172."))
+        {
+            return;
+        }
+        if (VpnWhitelisted(ip))
+        {
+            Debug.Log("[TKAC] VPN : " + ip + " en liste blanche — ignoré");
             return;
         }
         ulong sid = p.steamId;
@@ -614,7 +635,11 @@ public class TKAntiCheat : Plugin
         }
         if (hasCache)
         {
-            if (cached) { lock (vpnLock) { vpnFlagQueue.Add(sid); } }
+            if (cached)
+            {
+                Debug.Log("[TKAC] VPN : " + ip + " déjà connue VPN (cache) — flag " + sid);
+                lock (vpnLock) { vpnFlagQueue.Add(sid); }
+            }
             return;
         }
         Debug.Log("[TKAC] VPN : verification de " + ip + " (joueur " + sid + ")");
@@ -704,7 +729,16 @@ public class TKAntiCheat : Plugin
             }
         }
         catch { }
-        if (p == null || IsAdmin(p)) return;
+        if (p == null)
+        {
+            Debug.Log("[TKAC] VPN : flag abandonné (joueur " + sid + " introuvable/déconnecté)");
+            return;
+        }
+        if (IsAdmin(p))
+        {
+            Debug.Log("[TKAC] VPN : flag abandonné (admin) pour " + sid);
+            return;
+        }
         bool kick = config.vpnKick;
         Alert("VPN", SafePseudo(p), sid, "connecté via VPN/proxy/datacenter (" + ip + ")"
             + (kick ? " — kick" : " — surveiller"));
