@@ -329,7 +329,7 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.1.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.1.3 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -817,6 +817,8 @@ public class TKWebPanel : Plugin
                 return ApiMessage(body);
             case "/api/announce":
                 return ApiAnnounce(body);
+            case "/api/stats":
+                return ApiStats(body);
             case "/api/heal":
                 return ApiHeal(body);
             case "/api/tp":
@@ -1328,6 +1330,30 @@ public class TKWebPanel : Plugin
             p.SendText("<color=#00f0ff>Vous avez été soigné par un administrateur.</color>");
             Debug.Log("[TKWEB] HEAL steamid=" + steamId);
             StaffLog("soigne " + steamId);
+            return "{\"ok\":true}";
+        });
+    }
+
+    // Régler les jauges d'un joueur en ligne (vie / faim / soif), -1 = inchangé
+    private string ApiStats(string body)
+    {
+        string steamId = Json.GetString(body, "steamId", "");
+        int health = (int)Json.GetDouble(body, "health", -1);
+        int hunger = (int)Json.GetDouble(body, "hunger", -1);
+        int thirst = (int)Json.GetDouble(body, "thirst", -1);
+        return (string)RunOnMain(delegate
+        {
+            Player p = FindPlayer(steamId);
+            if (p == null || p.setup == null)
+            {
+                return "{\"error\":\"joueur introuvable ou pas en jeu\"}";
+            }
+            if (health >= 0) p.Health = Math.Max(0, Math.Min(100, health));
+            if (hunger >= 0) p.Hunger = Math.Max(0, Math.Min(100, hunger));
+            if (thirst >= 0) p.Thirst = Math.Max(0, Math.Min(100, thirst));
+            try { p.Notify("Admin", "Vos jauges ont été ajustées."); } catch { }
+            Debug.Log("[TKWEB] STATS steamid=" + steamId + " vie=" + health + " faim=" + hunger + " soif=" + thirst);
+            StaffLog("règle les jauges de " + steamId + " (vie=" + health + ", faim=" + hunger + ", soif=" + thirst + ")");
             return "{\"ok\":true}";
         });
     }

@@ -681,6 +681,23 @@ function openIdentityIp(ip){
     openModal(h, true);
   });
 }
+function statsPlayer(id){
+  var pl = playersCache.filter(function(p){ return p.steamId === id; })[0];
+  var who = pl ? pl.pseudo : id;
+  var cur = pl ? ' <span class="muted" style="font-weight:400;font-size:12px">(actuel : vie ' + pl.health + ')</span>' : '';
+  openModal('<h3>Jauges de ' + esc(who) + cur + '</h3>' +
+    '<p class="muted" style="font-size:12px;margin-bottom:10px">0 à 100 — laisse vide pour ne pas toucher.</p>' +
+    '<div class="cfgrow"><label>❤ Vie</label><input id="st-h" type="number" min="0" max="100" value="100"></div>' +
+    '<div class="cfgrow"><label>🍗 Faim</label><input id="st-f" type="number" min="0" max="100" value="100"></div>' +
+    '<div class="cfgrow"><label>💧 Soif</label><input id="st-s" type="number" min="0" max="100" value="100"></div>' +
+    '<button class="primary" style="margin-top:12px" onclick="statsApply(\'' + id + '\')">Appliquer</button>');
+}
+function statsApply(id){
+  function v(x){ var e = document.getElementById(x); return e.value === '' ? -1 : Math.max(0, Math.min(100, parseInt(e.value) || 0)); }
+  api('stats', {steamId: id, health: v('st-h'), hunger: v('st-f'), thirst: v('st-s')}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { closeModal(); toast('Jauges appliquées'); }
+  });
+}
 function playerActions(id){
   var pl = playersCache.filter(function(p){ return p.steamId === id; })[0];
   var who = pl ? pl.pseudo : id;
@@ -688,6 +705,7 @@ function playerActions(id){
   b += '<button onclick="closeModal();msgPlayer(\'' + id + '\')">💬 Message privé</button>';
   b += '<button onclick="closeModal();moneyPlayer(\'' + id + '\')">€ Argent (espèces / banque)</button>';
   b += '<button onclick="closeModal();healPlayer(\'' + id + '\')">❤ Soigner</button>';
+  b += '<button onclick="closeModal();statsPlayer(\'' + id + '\')">🍗 Jauges (vie, faim, soif)</button>';
   b += '<button onclick="closeModal();tpPlayer(\'' + id + '\')">📍 Téléporter</button>';
   b += '<button onclick="closeModal();notifyPlayer(\'' + id + '\')">📢 Notification</button>';
   b += '<button onclick="closeModal();xpPlayer(\'' + id + '\')">✨ Donner de l XP</button>';
