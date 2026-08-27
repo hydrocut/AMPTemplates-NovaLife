@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.12.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.12.2 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -4711,7 +4711,7 @@ public class TKWebPanel : Plugin
     // Comptes suspects (v3.12) : croisement du journal d'identités et des
     // bans en base. IP partagée par plusieurs SteamID = alts possibles ;
     // si l'un est banni et pas l'autre = évasion de ban probable.
-    private class SuspectBan { public string user; public string reason; }
+    private class SuspectBan { public string user; public string reason; public bool active; public int count; }
 
     private string ApiSuspects()
     {
@@ -4721,12 +4721,21 @@ public class TKWebPanel : Plugin
             SQLite.SQLiteConnection conn = new SQLite.SQLiteConnection(DbPath(), SQLite.SQLiteOpenFlags.ReadOnly, false);
             try
             {
+                long nowU = NowUnix();
                 foreach (BanRow r in conn.Query<BanRow>(
-                    "SELECT SteamId, Username, BanReason FROM Accounts WHERE BanTimestamp > 0 OR (BanReason IS NOT NULL AND BanReason != '')"))
+                    "SELECT SteamId, Username, BanReason, BanTimestamp, BanCount FROM Accounts WHERE BanTimestamp != 0 OR BanCount > 0"))
                 {
                     if (r != null && !string.IsNullOrEmpty(r.SteamId))
                     {
-                        banned[r.SteamId] = new SuspectBan { user = r.Username ?? "?", reason = r.BanReason ?? "?" };
+                        // convention du jeu : -1 = permanent, > maintenant = temporaire actif
+                        bool active = r.BanTimestamp == -1 || r.BanTimestamp > nowU;
+                        banned[r.SteamId] = new SuspectBan
+                        {
+                            user = r.Username ?? "?",
+                            reason = (r.BanReason ?? "?") + (active ? "" : " (ban expiré ×" + r.BanCount + ")"),
+                            active = active,
+                            count = r.BanCount
+                        };
                     }
                 }
             }
@@ -4791,7 +4800,8 @@ public class TKWebPanel : Plugin
             List<string> accs = new List<string>();
             foreach (string sid in kv.Value)
             {
-                bool isBan = banned.ContainsKey(sid);
+                SuspectBan sb2;
+                bool isBan = banned.TryGetValue(sid, out sb2) && sb2.active;
                 if (isBan) anyBan = true; else anyClean = true;
                 accs.Add("{\"sid\":\"" + sid + "\",\"name\":" + Json.Str(nameOf(sid))
                     + ",\"banned\":" + (isBan ? "true" : "false")
@@ -4814,13 +4824,17 @@ public class TKWebPanel : Plugin
                 ipsj.Add(Json.Str(ip));
             }
             multi.Add("{\"sid\":\"" + kv.Key + "\",\"name\":" + Json.Str(nameOf(kv.Key))
-                + ",\"banned\":" + (banned.ContainsKey(kv.Key) ? "true" : "false")
+                + ",\"banned\":" + (banned.ContainsKey(kv.Key) && banned[kv.Key].active ? "true" : "false")
                 + ",\"ips\":[" + string.Join(",", ipsj.ToArray()) + "]}");
         }
         // 3) bannis vus au journal
         List<string> seen = new List<string>();
         foreach (KeyValuePair<string, SuspectBan> kv in banned)
         {
+            if (!kv.Value.active && kv.Value.count < 2)
+            {
+                continue; // ban expiré unique : pas digne d'être listé
+            }
             List<string> ipl;
             if (!sidIps.TryGetValue(kv.Key, out ipl) || ipl.Count == 0)
             {
@@ -4845,6 +4859,8 @@ public class TKWebPanel : Plugin
         public string SteamId { get; set; }
         public string Username { get; set; }
         public string BanReason { get; set; }
+        public long BanTimestamp { get; set; }
+        public int BanCount { get; set; }
     }
 
     private string ApiServerLog(string body)

@@ -17,8 +17,8 @@ Meta.DockerBaseReadOnly=False
 Meta.ContainerPolicy=Supported
 Meta.ConfigReleaseState=NotSpecified
 Meta.NoCommercialUsage=False
-Meta.ConfigVersion=94
-Meta.ReleaseNotes=Panel v3.12.1 : colonne Heures (temps de jeu sur le serveur) dans Joueurs en ligne et dans l Historique joueurs.
+Meta.ConfigVersion=95
+Meta.ReleaseNotes=Panel v3.12.2 : Comptes suspects - seuls les bans ACTIFS comptent (-1 permanent, superieur a maintenant = actif, sinon expire) ; ex-bannis recidivistes listes avec mention ban expire xN.
 Meta.BreakingReleaseNotes=
 Meta.AppConfigId=9a624d70-5e24-4a2d-8a93-0d4fdc0e1f21
 Meta.ImportableExtensions=[]
