@@ -329,7 +329,7 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.3 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.4 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -710,6 +710,7 @@ public class TKWebPanel : Plugin
             case "/api/benchclear":
             case "/api/benchstatus":
             case "/api/banip":
+            case "/api/banipraw":
             case "/api/identity":
                 return 3;
             // modo autorisé (consultation + modération légère)
@@ -854,6 +855,8 @@ public class TKWebPanel : Plugin
                 return ApiAcDismiss(body);
             case "/api/banip":
                 return ApiBanIp(body);
+            case "/api/banipraw":
+                return ApiBanIpRaw(body);
             case "/api/identity":
                 return ApiIdentity(ctx.Request.QueryString["steamId"], ctx.Request.QueryString["ip"]);
             case "/api/benchspawn":
@@ -4337,6 +4340,67 @@ public class TKWebPanel : Plugin
             StaffLog("bannit l'IP " + ip + " (" + steamId + ")");
             Debug.Log("[TKWEB] BANIP " + ip + " (" + steamId + ")");
             return "{\"ok\":true,\"ip\":" + Json.Str(ip) + "}";
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":" + Json.Str(ex.Message) + "}";
+        }
+    }
+
+    // Bannit une IP saisie directement (depuis le journal d'identités ou
+    // le champ manuel de la section Sécurité) + coupe tout joueur en ligne
+    // depuis cette IP. Réutilise banned.txt de TKAntiFlood (rechargé à chaud).
+    private string ApiBanIpRaw(string body)
+    {
+        string ip = Json.GetString(body, "ip", "").Trim();
+        if (ip.StartsWith("::ffff:"))
+        {
+            ip = ip.Substring(7);
+        }
+        if (!Regex.IsMatch(ip, @"^[0-9]{1,3}(\.[0-9]{1,3}){3}$") && !Regex.IsMatch(ip, @"^[0-9a-fA-F:]+$"))
+        {
+            return "{\"error\":\"IP invalide (ex : 45.134.79.117)\"}";
+        }
+        if (ip == "127.0.0.1" || ip == "::1")
+        {
+            return "{\"error\":\"IP locale refusée\"}";
+        }
+        try
+        {
+            string f = Path.Combine(Path.Combine(Path.GetDirectoryName(pluginDir), "TKAntiFlood"), "banned.txt");
+            string existing = File.Exists(f) ? File.ReadAllText(f) : "";
+            if (!existing.Contains(ip + ";"))
+            {
+                File.AppendAllText(f, (existing.Length > 0 && !existing.EndsWith("\n") ? "\n" : "") + ip + ";0\n");
+            }
+            // couper les joueurs actuellement connectés depuis cette IP
+            string wantIp = ip;
+            int kicked = (int)RunOnMain(delegate
+            {
+                int n = 0;
+                try
+                {
+                    foreach (Player p in Nova.server.GetAllPlayers())
+                    {
+                        if (p == null || p.conn == null) continue;
+                        string a = null;
+                        try { NetworkConnectionToClient c = p.conn as NetworkConnectionToClient; a = c != null ? c.address : null; } catch { }
+                        if (a == null) continue;
+                        if (a.StartsWith("::ffff:")) a = a.Substring(7);
+                        int col = a.LastIndexOf(':');
+                        if (col > 0 && a.IndexOf('.') > 0 && col > a.IndexOf('.')) a = a.Substring(0, col);
+                        if (a == wantIp)
+                        {
+                            try { p.Disconnect("Bannissement IP"); n++; } catch { }
+                        }
+                    }
+                }
+                catch { }
+                return (object)n;
+            });
+            StaffLog("bannit l'IP " + ip + " (manuel)" + (kicked > 0 ? " — " + kicked + " joueur(s) déconnecté(s)" : ""));
+            Debug.Log("[TKWEB] BANIPRAW " + ip + " kicked=" + kicked);
+            return "{\"ok\":true,\"ip\":" + Json.Str(ip) + ",\"kicked\":" + kicked + "}";
         }
         catch (Exception ex)
         {

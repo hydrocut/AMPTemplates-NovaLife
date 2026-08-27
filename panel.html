@@ -469,7 +469,14 @@ button.chip img{width:26px;height:26px;object-fit:contain}
   </section>
 
   <section data-tab="securite">
-    <h2>Anti-flood — IP bannies (TKAntiFlood)</h2>
+    <h2>Bannir une adresse IP</h2>
+    <div class="row" style="margin-bottom:8px">
+      <input id="banip-input" placeholder="45.134.79.117" class="mono" style="width:200px">
+      <button class="danger" onclick="banIpManual()">Bannir l’IP</button>
+      <span class="muted" style="font-size:12px">Bloque au niveau réseau + déconnecte les joueurs de cette IP. Utile contre les crashers.</span>
+    </div>
+
+    <h2 style="margin-top:18px">Anti-flood — IP bannies (TKAntiFlood)</h2>
     <div class="tblwrap">
     <table>
       <thead><tr><th>IP</th><th>Expiration</th><th></th></tr></thead>
@@ -656,6 +663,7 @@ function openIdentityIp(ip){
   api('identity?ip=' + encodeURIComponent(ip)).then(function(r){
     if(r.error){ toast(r.error, true); return; }
     var h = '<h3>🔎 IP <span class="mono">' + esc(r.ip) + '</span></h3>';
+    h += '<button class="danger" style="margin-bottom:10px" onclick="if(confirm(\'Bannir l’IP ' + esc(r.ip) + ' ? Tous les comptes de cette IP seront bloqués au niveau réseau.\'))banIpFromJournal(\'' + esc(r.ip) + '\')">🚫 Bannir cette IP (anti-flood)</button>';
     if(!r.accounts.length){ h += '<p class="muted">Aucun compte enregistré sur cette IP.</p>'; }
     else {
       h += '<p class="muted" style="font-size:12px">' + r.accounts.length + ' compte(s) vu(s) depuis cette IP' + (r.accounts.length>1 ? ' — possibles alts / même foyer' : '') + '</p>';
@@ -978,6 +986,21 @@ function notifyAreaOwner(areaId){
   });
 }
 
+function banIpManual(){
+  var ip = (document.getElementById('banip-input').value || '').trim();
+  if(!ip) return toast('Saisis une IP', true);
+  api('banipraw', {ip: ip}).then(function(r){
+    if(r.error){ toast(r.error, true); } else {
+      document.getElementById('banip-input').value = '';
+      toast('IP ' + r.ip + ' bannie' + (r.kicked ? ' — ' + r.kicked + ' déconnecté(s)' : ''));
+    }
+  });
+}
+function banIpFromJournal(ip){
+  api('banipraw', {ip: ip}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('IP ' + r.ip + ' bannie' + (r.kicked ? ' — ' + r.kicked + ' déconnecté(s)' : '')); }
+  });
+}
 function floodUnban(ip){
   act('floodunban', {ip: ip}, 'IP retirée du fichier (redémarrage requis si encore en mémoire)');
 }
