@@ -329,7 +329,8 @@ public class TKWebPanel : Plugin
             StartAutoBackup();
         StartSericache();
         StartIdentityLogger();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.6.1 initialisé — panel sur le port " + port);
+        StartLogBuffer();
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.7 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -711,6 +712,7 @@ public class TKWebPanel : Plugin
             case "/api/benchstatus":
             case "/api/banip":
             case "/api/banipraw":
+            case "/api/serverlog":
             case "/api/identity":
                 return 3;
             // modo autorisé (consultation + modération légère)
@@ -857,6 +859,8 @@ public class TKWebPanel : Plugin
                 return ApiBanIp(body);
             case "/api/banipraw":
                 return ApiBanIpRaw(body);
+            case "/api/serverlog":
+                return ApiServerLog(body);
             case "/api/identity":
                 return ApiIdentity(ctx.Request.QueryString["steamId"], ctx.Request.QueryString["ip"]);
             case "/api/benchspawn":
@@ -4496,6 +4500,189 @@ public class TKWebPanel : Plugin
             File.WriteAllText(IdentPath(), sb.ToString());
         }
         catch (Exception ex) { Debug.LogError("[TKWEB] Ecriture identities.tsv : " + ex.Message); }
+    }
+
+    // ------------------------------------------------------------------
+    // Journal du serveur (v3.7). Deux niveaux :
+    //  - un tampon mémoire de TOUTES les lignes de la console (4000 max,
+    //    perdu au restart) pour la vue « En direct » ;
+    //  - une archive sur disque des lignes IMPORTANTES (alertes TKFLOOD/
+    //    TKCHEAT, actions TKWEB, erreurs) dans serverlog/AAAA-MM-JJ.log,
+    //    conservée 30 jours, pour l'historique.
+    private static readonly object logBufLock = new object();
+    private static readonly List<string[]> logBuf = new List<string[]>();
+    private static bool logBufStarted;
+    private static string logLastFileMsg = "";
+    private static long logFileBytesToday;
+    private static string logFileDay = "";
+
+    private static bool LogIsImportant(string msg, LogType type)
+    {
+        if (type == LogType.Error || type == LogType.Exception)
+        {
+            return true;
+        }
+        return msg.IndexOf("[TKFLOOD]", StringComparison.Ordinal) >= 0
+            || msg.IndexOf("[TKCHEAT]", StringComparison.Ordinal) >= 0
+            || msg.IndexOf("[TKWEB]", StringComparison.Ordinal) >= 0
+            || msg.IndexOf("[TKGHOST]", StringComparison.Ordinal) >= 0
+            || msg.IndexOf("ALERTE", StringComparison.Ordinal) >= 0;
+    }
+
+    private void StartLogBuffer()
+    {
+        lock (logBufLock)
+        {
+            if (logBufStarted)
+            {
+                return;
+            }
+            logBufStarted = true;
+        }
+        string dir = Path.Combine(pluginDir, "serverlog");
+        try
+        {
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            // rétention : purge des fichiers de plus de 30 jours
+            foreach (string f in Directory.GetFiles(dir, "*.log"))
+            {
+                try
+                {
+                    if ((DateTime.Now - File.GetLastWriteTime(f)).TotalDays > 30)
+                    {
+                        File.Delete(f);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+        catch
+        {
+        }
+        Application.logMessageReceivedThreaded += delegate (string condition, string stackTrace, LogType type)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(condition))
+                {
+                    return;
+                }
+                string msg = condition.Replace("\r", " ").Replace("\n", " ");
+                if (msg.Length > 500)
+                {
+                    msg = msg.Substring(0, 500);
+                }
+                string hhmm = DateTime.Now.ToString("HH:mm:ss");
+                lock (logBufLock)
+                {
+                    logBuf.Add(new string[] { hhmm, type.ToString(), msg });
+                    if (logBuf.Count > 4000)
+                    {
+                        logBuf.RemoveRange(0, 1000);
+                    }
+                    if (LogIsImportant(msg, type) && msg != logLastFileMsg)
+                    {
+                        logLastFileMsg = msg;
+                        string day = DateTime.Now.ToString("yyyy-MM-dd");
+                        if (day != logFileDay)
+                        {
+                            logFileDay = day;
+                            logFileBytesToday = 0;
+                        }
+                        // garde-fou : 5 Mo/jour max (un spam d'erreurs ne remplit pas le disque)
+                        if (logFileBytesToday < 5 * 1024 * 1024)
+                        {
+                            string line = hhmm + "|" + type + "|" + msg + "\n";
+                            File.AppendAllText(Path.Combine(dir, day + ".log"), line);
+                            logFileBytesToday += line.Length;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        };
+    }
+
+    private string ApiServerLog(string body)
+    {
+        string q = Json.GetString(body, "q", "").Trim().ToLowerInvariant();
+        string mode = Json.GetString(body, "mode", "all");
+        string day = Json.GetString(body, "day", "").Trim();
+        string dir = Path.Combine(pluginDir, "serverlog");
+        // liste des jours archivés disponibles
+        List<string> days = new List<string>();
+        try
+        {
+            foreach (string f in Directory.GetFiles(dir, "*.log"))
+            {
+                days.Add(Path.GetFileNameWithoutExtension(f));
+            }
+            days.Sort();
+            days.Reverse();
+        }
+        catch
+        {
+        }
+        List<string[]> snap = new List<string[]>();
+        if (day.Length > 0)
+        {
+            // historique : lecture du fichier du jour demandé
+            if (!Regex.IsMatch(day, "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))
+            {
+                return "{\"error\":\"jour invalide\"}";
+            }
+            string path = Path.Combine(dir, day + ".log");
+            if (File.Exists(path))
+            {
+                string[] all = File.ReadAllLines(path);
+                int start = all.Length > 3000 ? all.Length - 3000 : 0;
+                for (int i = start; i < all.Length; i++)
+                {
+                    string[] parts = all[i].Split(new char[] { '|' }, 3);
+                    if (parts.Length == 3)
+                    {
+                        snap.Add(parts);
+                    }
+                }
+            }
+        }
+        else
+        {
+            lock (logBufLock)
+            {
+                snap.AddRange(logBuf);
+            }
+        }
+        List<string> outp = new List<string>();
+        for (int i = snap.Count - 1; i >= 0 && outp.Count < 400; i--)
+        {
+            string[] e = snap[i];
+            LogType approx = (e[1] == "Error" || e[1] == "Exception") ? LogType.Error : LogType.Log;
+            if (mode == "alerts" && !LogIsImportant(e[2], approx))
+            {
+                continue;
+            }
+            if (q.Length > 0 && e[2].ToLowerInvariant().IndexOf(q, StringComparison.Ordinal) < 0)
+            {
+                continue;
+            }
+            outp.Add("{\"t\":" + Json.Str(e[0]) + ",\"ty\":" + Json.Str(e[1]) + ",\"m\":" + Json.Str(e[2]) + "}");
+        }
+        outp.Reverse();
+        List<string> dj = new List<string>();
+        foreach (string d in days)
+        {
+            dj.Add(Json.Str(d));
+        }
+        return "{\"lines\":[" + string.Join(",", outp.ToArray()) + "],\"total\":" + snap.Count
+            + ",\"days\":[" + string.Join(",", dj.ToArray()) + "]}";
     }
 
     private void StartIdentityLogger()

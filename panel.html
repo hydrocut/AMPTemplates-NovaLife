@@ -519,6 +519,19 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     </table>
     </div>
   </section>
+
+  <section data-tab="securite" class="need-owner">
+    <h2>Journal du serveur <span class="muted" style="font-weight:400;font-size:12px">— alertes &amp; actions archivées 30 jours, console en direct depuis le démarrage</span></h2>
+    <div class="row" style="margin-bottom:8px;flex-wrap:wrap">
+      <select id="slog-day" onchange="loadServerLog()"><option value="">En direct (console)</option></select>
+      <input id="slog-q" placeholder="Filtrer (TKFLOOD, mod-menu, pseudo…)" style="width:240px" onkeydown="if(event.key==='Enter')loadServerLog()">
+      <button onclick="loadServerLog()">Actualiser</button>
+      <label style="font-size:12px"><input type="checkbox" id="slog-alerts" checked onchange="loadServerLog()"> Alertes seulement</label>
+      <label style="font-size:12px"><input type="checkbox" id="slog-auto" onchange="slogAuto()"> Auto 5 s</label>
+      <span id="slog-count" class="muted" style="font-size:12px"></span>
+    </div>
+    <div id="slog-box" class="mono" style="max-height:420px;overflow:auto;border:1px solid var(--line,#2a3142);border-radius:8px;padding:10px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word"><span class="muted">Chargement…</span></div>
+  </section>
   <section data-tab="admins" class="need-owner">
     <h2>Comptes du panel <span class="muted" style="font-weight:400;font-size:12px">— accès web admin/modo, gérés par le propriétaire</span></h2>
     <div class="row" style="margin-bottom:12px">
@@ -1022,6 +1035,39 @@ function notifyAreaOwner(areaId){
   });
 }
 
+var slogTimer = null;
+function loadServerLog(){
+  var day = document.getElementById('slog-day').value;
+  var q = document.getElementById('slog-q').value.trim();
+  var alerts = document.getElementById('slog-alerts').checked;
+  api('serverlog', {day: day, q: q, mode: alerts ? 'alerts' : 'all'}).then(function(r){
+    var b = document.getElementById('slog-box');
+    if(r.error){ b.textContent = r.error; return; }
+    var sel = document.getElementById('slog-day');
+    if(r.days && sel.options.length !== r.days.length + 1){
+      var cur = sel.value;
+      sel.innerHTML = '<option value="">En direct (console)</option>' + r.days.map(function(d){ return '<option value="' + d + '"' + (d === cur ? ' selected' : '') + '>' + d + '</option>'; }).join('');
+    }
+    document.getElementById('slog-count').textContent = r.lines.length + ' ligne(s) affichée(s) / ' + r.total;
+    if(!r.lines.length){ b.innerHTML = '<span class="muted">Rien à afficher' + (alerts ? ' — décoche « Alertes seulement » pour tout voir' : '') + '</span>'; return; }
+    var atBottom = b.scrollTop + b.clientHeight >= b.scrollHeight - 40;
+    b.innerHTML = r.lines.map(function(l){
+      var red = l.ty === 'Error' || l.ty === 'Exception' || /ALERTE|PACKET-BAN|BAN ip=|CHEAT/.test(l.m);
+      var orange = /\[TKFLOOD\]|\[TKCHEAT\]/.test(l.m) && !red;
+      var st = red ? 'color:#ff7b72' : (orange ? 'color:#e3b341' : '');
+      return '<div style="' + st + '"><span style="opacity:.5">' + esc(l.t) + '</span> ' + linkSteam(esc(l.m)) + '</div>';
+    }).join('');
+    if(day){ b.scrollTop = 0; } else if(atBottom){ b.scrollTop = b.scrollHeight; }
+  });
+}
+function slogAuto(){
+  if(slogTimer){ clearInterval(slogTimer); slogTimer = null; }
+  if(document.getElementById('slog-auto').checked){
+    slogTimer = setInterval(function(){
+      if(localStorage.getItem('tkweb_tab') === 'securite' && !document.getElementById('slog-day').value) loadServerLog();
+    }, 5000);
+  }
+}
 function banIpManual(){
   var ip = (document.getElementById('banip-input').value || '').trim();
   if(!ip) return toast('Saisis une IP', true);
@@ -1233,7 +1279,7 @@ function showTab(name){
   if(name === 'monde'){ loadPlugins(); if(myLevel() >= 3){ loadBackups(); loadBench(); } }
   if(name === 'carte'){ initMap(); renderMapDots(); pollMapVehicles(); }
   if(name === 'classement') loadRankings();
-  if(name === 'securite'){ if(myLevel() >= 3) loadAcConfig(); markAlertsSeen(); }
+  if(name === 'securite'){ if(myLevel() >= 3){ loadAcConfig(); loadServerLog(); } markAlertsSeen(); }
   if(name === 'chat') chatScrollBottom();
 }
 
