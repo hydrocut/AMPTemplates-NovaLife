@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.15.2 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.16 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -714,6 +714,7 @@ public class TKWebPanel : Plugin
             case "/api/banipraw":
             case "/api/serverlog":
             case "/api/suspects":
+            case "/api/suspectok":
             case "/api/dossier":
             case "/api/dossiernote":
             case "/api/steamkey":
@@ -876,6 +877,8 @@ public class TKWebPanel : Plugin
                 return ApiServerLog(body);
             case "/api/suspects":
                 return ApiSuspects();
+            case "/api/suspectok":
+                return ApiSuspectOk(body);
             case "/api/steaminfo":
                 return ApiSteamInfo(body);
             case "/api/playtime":
@@ -4719,8 +4722,76 @@ public class TKWebPanel : Plugin
     // si l'un est banni et pas l'autre = évasion de ban probable.
     private class SuspectBan { public string user; public string reason; public bool active; public int count; }
 
+    // Validations « légitime » des cartes suspectes : key -> [note, unix]
+    private Dictionary<string, string[]> suspectOk;
+    private readonly object suspectOkLock = new object();
+
+    private string SuspectOkPath() { return Path.Combine(pluginDir, "suspectok.tsv"); }
+
+    private Dictionary<string, string[]> LoadSuspectOk()
+    {
+        lock (suspectOkLock)
+        {
+            if (suspectOk != null) return suspectOk;
+            suspectOk = new Dictionary<string, string[]>();
+            try
+            {
+                if (File.Exists(SuspectOkPath()))
+                {
+                    foreach (string line in File.ReadAllLines(SuspectOkPath()))
+                    {
+                        string[] p = line.Split('\t');
+                        if (p.Length >= 3) suspectOk[p[0]] = new string[] { p[1], p[2] };
+                    }
+                }
+            }
+            catch { }
+            return suspectOk;
+        }
+    }
+
+    private void SaveSuspectOk()
+    {
+        lock (suspectOkLock)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+                foreach (KeyValuePair<string, string[]> kv in suspectOk)
+                {
+                    sb.Append(kv.Key).Append('\t').Append((kv.Value[0] ?? "").Replace('\t', ' '))
+                      .Append('\t').Append(kv.Value[1]).Append('\n');
+                }
+                File.WriteAllText(SuspectOkPath(), sb.ToString());
+            }
+            catch { }
+        }
+    }
+
+    private string ApiSuspectOk(string body)
+    {
+        string key = Json.GetString(body, "key", "").Trim();
+        string note = Json.GetString(body, "note", "").Trim();
+        bool remove = Json.GetBool(body, "remove", false);
+        if (key.Length == 0 || key.Length > 120)
+        {
+            return "{\"error\":\"clé invalide\"}";
+        }
+        LoadSuspectOk();
+        lock (suspectOkLock)
+        {
+            if (remove) suspectOk.Remove(key);
+            else suspectOk[key] = new string[] { note, NowUnix().ToString() };
+        }
+        SaveSuspectOk();
+        StaffLog((remove ? "retire la validation de " : "valide comme légitime ") + key
+            + (note.Length > 0 ? " (" + note + ")" : ""));
+        return "{\"ok\":true}";
+    }
+
     private string ApiSuspects()
     {
+        Dictionary<string, string[]> okMap = LoadSuspectOk();
         Dictionary<string, SuspectBan> banned = new Dictionary<string, SuspectBan>();
         try
         {
@@ -4813,7 +4884,11 @@ public class TKWebPanel : Plugin
                     + ",\"banned\":" + (isBan ? "true" : "false")
                     + ",\"reason\":" + Json.Str(isBan ? banned[sid].reason : "") + "}");
             }
+            string[] okv;
+            bool okd = okMap.TryGetValue("ip:" + kv.Key, out okv);
             shared.Add("{\"ip\":" + Json.Str(kv.Key) + ",\"evasion\":" + (anyBan && anyClean ? "true" : "false")
+                + ",\"ok\":" + (okd ? "true" : "false")
+                + ",\"okNote\":" + Json.Str(okd ? okv[0] : "")
                 + ",\"accounts\":[" + string.Join(",", accs.ToArray()) + "]}");
         }
         // 2) comptes multi-IP (3+)
@@ -4829,8 +4904,12 @@ public class TKWebPanel : Plugin
             {
                 ipsj.Add(Json.Str(ip));
             }
+            string[] okv2;
+            bool okd2 = okMap.TryGetValue("multi:" + kv.Key, out okv2);
             multi.Add("{\"sid\":\"" + kv.Key + "\",\"name\":" + Json.Str(nameOf(kv.Key))
                 + ",\"banned\":" + (banned.ContainsKey(kv.Key) && banned[kv.Key].active ? "true" : "false")
+                + ",\"ok\":" + (okd2 ? "true" : "false")
+                + ",\"okNote\":" + Json.Str(okd2 ? okv2[0] : "")
                 + ",\"ips\":[" + string.Join(",", ipsj.ToArray()) + "]}");
         }
         // 3) bannis vus au journal

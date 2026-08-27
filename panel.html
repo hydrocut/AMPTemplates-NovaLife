@@ -140,7 +140,7 @@ input:focus{outline:none;border-color:var(--accent)}
 .pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
 .plugitem{display:flex;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
 .plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.slink{color:var(--accent);text-decoration:none;border-bottom:1px dotted rgba(88,166,255,.5);cursor:pointer}.slink:hover{border-bottom-style:solid}.morebtn{width:100%;text-align:center;padding:9px;font-size:12px}.acdetail{white-space:normal!important;word-break:break-word;max-width:480px;min-width:260px;line-height:1.5;font-size:12.5px}.srow{display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 12px;padding:8px 12px;background:var(--panel2,#161b22);border-radius:8px}.scount{font-size:13px;font-weight:600}.scard{margin:8px 0;padding:10px 12px;border-radius:9px;background:var(--panel2,#161b22);border-left:3px solid var(--line,#2a3142)}.scard.danger{border-left-color:#ff5c5c;background:#ff5c5c0f}.scard.warn{border-left-color:#e3b341;background:#e3b3410d}.scard.info{border-left-color:#58a6ff;background:#58a6ff0d}.schead{font-size:13px;font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sacc{font-size:13px;margin:3px 0;line-height:1.7}.ipl{font-size:12.5px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}.vpnb{display:inline-block;font-size:10px;font-weight:700;color:#ff7b72;background:#ff5c5c22;padding:1px 5px;border-radius:5px;vertical-align:middle}.sban{margin-left:auto;font-size:11px;padding:3px 10px;background:#ff5c5c1f;color:#ff7b72;border:1px solid #ff5c5c44;border-radius:6px;cursor:pointer}.sban:hover{background:#ff5c5c33}#mapwrap{position:relative;height:calc(100vh - 150px);min-height:420px;overflow:hidden;background:#e9e9e7;border:1px solid var(--border);border-radius:10px;cursor:grab;touch-action:none}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.slink{color:var(--accent);text-decoration:none;border-bottom:1px dotted rgba(88,166,255,.5);cursor:pointer}.slink:hover{border-bottom-style:solid}.morebtn{width:100%;text-align:center;padding:9px;font-size:12px}.acdetail{white-space:normal!important;word-break:break-word;max-width:480px;min-width:260px;line-height:1.5;font-size:12.5px}.srow{display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 12px;padding:8px 12px;background:var(--panel2,#161b22);border-radius:8px}.scount{font-size:13px;font-weight:600}.scard{margin:8px 0;padding:10px 12px;border-radius:9px;background:var(--panel2,#161b22);border-left:3px solid var(--line,#2a3142)}.scard.danger{border-left-color:#ff5c5c;background:#ff5c5c0f}.scard.warn{border-left-color:#e3b341;background:#e3b3410d}.scard.info{border-left-color:#58a6ff;background:#58a6ff0d}.schead{font-size:13px;font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sacc{font-size:13px;margin:3px 0;line-height:1.7}.ipl{font-size:12.5px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}.vpnb{display:inline-block;font-size:10px;font-weight:700;color:#ff7b72;background:#ff5c5c22;padding:1px 5px;border-radius:5px;vertical-align:middle}.sban{margin-left:auto;font-size:11px;padding:3px 10px;background:#ff5c5c1f;color:#ff7b72;border:1px solid #ff5c5c44;border-radius:6px;cursor:pointer}.sban:hover{background:#ff5c5c33}.sok{margin-left:6px;font-size:11px;padding:3px 10px;background:#3fb9501f;color:#3fb950;border:1px solid #3fb95044;border-radius:6px;cursor:pointer}.sok:hover{background:#3fb95033}#mapwrap{position:relative;height:calc(100vh - 150px);min-height:420px;overflow:hidden;background:#e9e9e7;border:1px solid var(--border);border-radius:10px;cursor:grab;touch-action:none}
 #mapwrap.grabbing{cursor:grabbing}
 #mapinner{position:absolute;transform-origin:0 0;width:3500px;height:3500px}
 #mapimg{width:3500px;height:3500px;display:block;user-select:none;pointer-events:none}
@@ -1101,6 +1101,21 @@ function ipChip(ip){
   var vpn = suspVpnSet[ip] ? ' <span class="vpnb" title="IP VPN/proxy/datacenter détectée">VPN</span>' : '';
   return '<a href="#" class="ipl mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>' + vpn;
 }
+var suspShowOk = false;
+function suspOkBtn(key){
+  return '<button class="sok" title="Marquer comme vérifié / légitime (frères, coloc, cybercafé...)" onclick="suspValidate(\'' + esc(key) + '\')">✓ Légitime</button>';
+}
+function suspUnokBtn(key){
+  return '<button class="sok" style="opacity:.8" title="Retirer la validation : la carte redeviendra visible" onclick="api(\'suspectok\',{key:\'' + esc(key) + '\',remove:true}).then(function(){ loadSuspects(); })">↩ Retirer</button>';
+}
+function suspValidate(key){
+  var note = prompt('Note (optionnelle) — pourquoi c\u2019est légitime ?', 'frères / même foyer vérifié');
+  if(note === null) return;
+  api('suspectok', {key: key, note: note}).then(function(r){
+    if(r.error){ toast(r.error, true); } else { toast('Validé comme légitime ✓'); loadSuspects(); }
+  });
+}
+function suspToggleOk(){ suspShowOk = !suspShowOk; loadSuspects(); }
 function suspBanBtn(ip){
   if(suspBlockedSet[ip]){
     return '<span class="badge" style="margin-left:auto;background:#3fb95022;color:#3fb950" title="Cette IP est déjà bloquée au niveau réseau (banned.txt)">✓ IP déjà bannie</span>';
@@ -1116,15 +1131,18 @@ function loadSuspects(){
     (r.vpnIps || []).forEach(function(ip){ suspVpnSet[ip] = 1; });
     suspBlockedSet = {};
     (r.blockedIps || []).forEach(function(ip){ suspBlockedSet[ip] = 1; });
-    var ev = (r.shared || []).filter(function(x){ return x.evasion; });
-    var sh = (r.shared || []).filter(function(x){ return !x.evasion; });
-    var multi = r.multi || [], bs = r.bannedSeen || [];
+    var okCount = ((r.shared||[]).filter(function(x){ return x.ok; }).length) + ((r.multi||[]).filter(function(x){ return x.ok; }).length);
+    var fOk = function(x){ return suspShowOk || !x.ok; };
+    var ev = (r.shared || []).filter(function(x){ return x.evasion && fOk(x); });
+    var sh = (r.shared || []).filter(function(x){ return !x.evasion && fOk(x); });
+    var multi = (r.multi || []).filter(fOk), bs = r.bannedSeen || [];
     // barre de synthèse
     var chips = [];
     if(ev.length) chips.push('<span class="scount" style="color:#ff5c5c">🚨 ' + ev.length + ' évasion' + (ev.length>1?'s':'') + '</span>');
     if(sh.length) chips.push('<span class="scount" style="color:#e3b341">👥 ' + sh.length + ' IP partagée' + (sh.length>1?'s':'') + '</span>');
     if(multi.length) chips.push('<span class="scount" style="color:#58a6ff">🌐 ' + multi.length + ' multi-IP</span>');
     if(bs.length) chips.push('<span class="scount muted">🚫 ' + bs.length + ' banni' + (bs.length>1?'s':'') + '</span>');
+    if(okCount) chips.push('<a href="#" class="scount" style="color:#3fb950;text-decoration:none" onclick="suspToggleOk();return false">✓ ' + okCount + ' validé' + (okCount>1?'s':'') + (suspShowOk ? ' (masquer)' : ' (afficher)') + '</a>');
     var out = chips.length ? '<div class="srow">' + chips.join('') + '</div>' : '';
 
     // 1) Évasion de ban — cartes rouges
@@ -1135,12 +1153,14 @@ function loadSuspects(){
           : '<span class="badge" style="background:#3fb95022;color:#3fb950">actif</span>';
         return '<div class="sacc">' + slinkSteam(a.sid, a.name) + ' ' + tag + '</div>';
       }).join('');
-      out += '<div class="scard danger"><div class="schead">🚨 Évasion de ban probable — ' + ipChip(x.ip) + suspBanBtn(x.ip) + '</div>' + accs + '</div>';
+      var okTag = x.ok ? ' <span class="badge" style="background:#3fb95022;color:#3fb950">✓ validé' + (x.okNote ? ' · ' + esc(x.okNote) : '') + '</span>' : '';
+      out += '<div class="scard danger"' + (x.ok ? ' style="opacity:.55"' : '') + '><div class="schead">🚨 Évasion de ban probable — ' + ipChip(x.ip) + okTag + (x.ok ? suspUnokBtn('ip:' + x.ip) : suspBanBtn(x.ip) + suspOkBtn('ip:' + x.ip)) + '</div>' + accs + '</div>';
     });
 
     // 2) IP partagées — cartes ambre compactes
     sh.forEach(function(x){
-      out += '<div class="scard warn"><div class="schead">👥 ' + ipChip(x.ip) + ' <span class="muted" style="font-weight:400;font-size:12px">' + x.accounts.length + ' comptes</span>' + suspBanBtn(x.ip) + '</div>' +
+      var okTag2 = x.ok ? ' <span class="badge" style="background:#3fb95022;color:#3fb950">✓ validé' + (x.okNote ? ' · ' + esc(x.okNote) : '') + '</span>' : '';
+      out += '<div class="scard warn"' + (x.ok ? ' style="opacity:.55"' : '') + '><div class="schead">👥 ' + ipChip(x.ip) + ' <span class="muted" style="font-weight:400;font-size:12px">' + x.accounts.length + ' comptes</span>' + okTag2 + (x.ok ? suspUnokBtn('ip:' + x.ip) : suspBanBtn(x.ip) + suspOkBtn('ip:' + x.ip)) + '</div>' +
         '<div class="sacc">' + x.accounts.map(function(a){ return slinkSteam(a.sid, a.name); }).join(' &nbsp;·&nbsp; ') + '</div></div>';
     });
 
@@ -1152,7 +1172,8 @@ function loadSuspects(){
       if(nv > 0 && clean.length > 0 && clean.length <= 2){
         meta += ' · <span style="color:#3fb950">🏠 réelle probable : ' + clean.map(function(ip){ return '<a href="#" class="ipl mono" onclick="openIdentityIp(\'' + esc(ip) + '\');return false">' + esc(ip) + '</a>'; }).join(', ') + '</span>';
       }
-      out += '<div class="scard info"><div class="schead">🌐 ' + slinkSteam(x.sid, x.name) + (x.banned ? ' <span class="badge" style="background:#ff5c5c22;color:#ff7b72">BANNI</span>' : '') + ' <span class="muted" style="font-weight:400;font-size:12px">' + meta + '</span></div>' +
+      var okTag3 = x.ok ? ' <span class="badge" style="background:#3fb95022;color:#3fb950">✓ validé' + (x.okNote ? ' · ' + esc(x.okNote) : '') + '</span>' : '';
+      out += '<div class="scard info"' + (x.ok ? ' style="opacity:.55"' : '') + '><div class="schead">🌐 ' + slinkSteam(x.sid, x.name) + (x.banned ? ' <span class="badge" style="background:#ff5c5c22;color:#ff7b72">BANNI</span>' : '') + ' <span class="muted" style="font-weight:400;font-size:12px">' + meta + '</span>' + okTag3 + (x.ok ? suspUnokBtn('multi:' + x.sid) : suspOkBtn('multi:' + x.sid)) + '</div>' +
         '<div class="sacc">' + x.ips.slice(0,8).map(ipChip).join(' &nbsp; ') + '</div></div>';
     });
 
