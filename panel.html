@@ -140,7 +140,21 @@ input:focus{outline:none;border-color:var(--accent)}
 .pluglist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
 .plugitem{display:flex;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px}
 .plugitem .pn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.slink{color:var(--accent);text-decoration:none;border-bottom:1px dotted rgba(88,166,255,.5);cursor:pointer}.slink:hover{border-bottom-style:solid}.morebtn{width:100%;text-align:center;padding:9px;font-size:12px}
+.plugitem .pm{color:var(--muted);font-size:11px;white-space:nowrap}.plugitem{align-items:center}.plugitem.clickable{cursor:pointer}.plugitem.clickable:hover{border-color:var(--accent)}.pdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.pdot.on{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6)}.pdot.off{background:#f85149;box-shadow:0 0 6px rgba(248,81,73,.6)}.slink{color:var(--accent);text-decoration:none;border-bottom:1px dotted rgba(88,166,255,.5);cursor:pointer}.slink:hover{border-bottom-style:solid}.morebtn{width:100%;text-align:center;padding:9px;font-size:12px}#mapwrap{position:relative;height:calc(100vh - 150px);min-height:420px;overflow:hidden;background:#e9e9e7;border:1px solid var(--border);border-radius:10px;cursor:grab;touch-action:none}
+#mapwrap.grabbing{cursor:grabbing}
+#mapinner{position:absolute;transform-origin:0 0;width:3500px;height:3500px}
+#mapimg{width:3500px;height:3500px;display:block;user-select:none;pointer-events:none}
+#mapdots{position:absolute;inset:0}
+.mdot{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5);transform:translate(-50%,-50%) scale(var(--invs,1));cursor:pointer}
+.mdot.adm{background:var(--warn)}
+.mdot span{position:absolute;left:50%;top:-21px;transform:translateX(-50%);background:rgba(10,14,22,.85);color:#fff;font-size:10px;font-weight:600;padding:1px 7px;border-radius:5px;white-space:nowrap;pointer-events:none}
+#maphud{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;z-index:3}
+#maphud button{width:34px;height:34px;border-radius:8px;font-size:15px;opacity:.55}
+#maphud button.tgon,#maphud button:hover{opacity:1}
+.mveh{position:absolute;width:11px;height:11px;border-radius:3px;background:#e8ecf4;border:2px solid #333;box-shadow:0 1px 5px rgba(0,0,0,.45);transform:translate(-50%,-50%) scale(var(--invs,1)) rotate(45deg);cursor:pointer}
+.mveh.gh{background:#8b95a8;opacity:.55}
+#calbox{position:absolute;left:10px;top:10px;right:56px;background:rgba(10,14,22,.92);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;font-size:12.5px;z-index:4}.mveh{position:absolute;width:11px;height:11px;border-radius:3px;background:#e8ecf4;border:2px solid #333;box-shadow:0 1px 5px rgba(0,0,0,.45);transform:translate(-50%,-50%) scale(var(--invs,1)) rotate(45deg);cursor:pointer}
+.mveh.gh{background:#8b95a8;opacity:.55}
 .rkchip{border:1px solid var(--border);background:var(--panel2);color:var(--muted);border-radius:999px;padding:6px 13px;font-size:12px;cursor:pointer}
 .rkchip.on{color:var(--text);border-color:var(--accent);background:linear-gradient(90deg,var(--accent-soft),transparent)}
 .pod{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:13px 14px;text-align:center}
@@ -237,6 +251,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     <button data-nav="dashboard" onclick="showTab('dashboard')"><i></i>Tableau de bord</button>
     <button data-nav="joueurs" onclick="showTab('joueurs')"><i></i>Joueurs</button>
     <button data-nav="comptes" onclick="showTab('comptes')"><i></i>Comptes</button>
+    <button data-nav="carte" onclick="showTab('carte')"><i></i>Carte</button>
     <button data-nav="classement" onclick="showTab('classement')"><i></i>Classement</button>
     <button data-nav="monde" onclick="showTab('monde')"><i></i>Monde</button>
     <button data-nav="chat" onclick="showTab('chat')"><i></i>Chat</button>
@@ -335,6 +350,26 @@ button.chip img{width:26px;height:26px;object-fit:contain}
       <tbody id="rk-body"><tr><td class="muted">Chargement…</td></tr></tbody>
     </table></div>
   </section>
+
+  <section data-tab="carte">
+    <h2>Carte en direct <span class="muted" style="font-weight:400;font-size:12px">— joueurs actualisés toutes les 5 s · molette pour zoomer, glisser pour déplacer</span></h2>
+    <div id="mapwrap">
+      <div id="mapinner">
+        <img id="mapimg" src="mapimg" alt="Carte" draggable="false">
+        <div id="mapdots"></div>
+      </div>
+      <div id="maphud">
+        <button onclick="mapZoom(1.4)">+</button>
+        <button onclick="mapZoom(0.72)">−</button>
+        <button onclick="mapReset()" title="Recentrer">⌂</button>
+        <button id="tgP" class="tgon" onclick="mapTogglePlayers()" title="Joueurs">👤</button>
+        <button id="tgV" class="tgon" onclick="mapToggleVehicles()" title="Véhicules">🚗</button>
+        <button class="need-admin" id="calbtn" onclick="calStart()" title="Calibrer la carte en 2 points">🎯</button>
+      </div>
+      <div id="calbox" style="display:none"></div>
+    </div>
+  </section>
+
 
   <section data-tab="joueurs" class="need-admin">
     <h2>Donner un objet / un véhicule</h2>
@@ -730,6 +765,7 @@ function histActions(cid, steamId, banned){
 }
 
 function renderPlayers(){
+  try { renderMapDots(); } catch(e) {}
   var tb = document.getElementById('players');
   var q = (document.getElementById('players-filter').value || '').trim().toLowerCase();
   var list = playersCache.filter(function(p){
@@ -1195,6 +1231,7 @@ function showTab(name){
   localStorage.setItem('tkweb_tab', name);
   if(name === 'admins'){ loadAdmins(true); if(myLevel() >= 3) loadPanelUsers(); }
   if(name === 'monde'){ loadPlugins(); if(myLevel() >= 3){ loadBackups(); loadBench(); } }
+  if(name === 'carte'){ initMap(); renderMapDots(); pollMapVehicles(); }
   if(name === 'classement') loadRankings();
   if(name === 'securite'){ if(myLevel() >= 3) loadAcConfig(); markAlertsSeen(); }
   if(name === 'chat') chatScrollBottom();
@@ -2060,6 +2097,151 @@ function renderRankings(){
       '<td>' + (p.steamId ? slinkSteam(p.steamId, p.username || '?') : esc(p.username || '?')) + '</td>' +
       d.fmt(p).map(function(v){ return '<td>' + v + '</td>'; }).join('') + '</tr>';
   }).join('') || '<tr><td colspan="9" class="muted">Aucune donn\u00e9e</td></tr>';
+}
+
+// --- Carte en direct ---
+var mapCal = null, mapScale = 0.22, mapTx = 0, mapTy = 0, mapInit = false, calState = 0, calPts = [];
+function mapApply(){
+  var el = document.getElementById('mapinner');
+  if(el){
+    el.style.transform = 'translate(' + mapTx + 'px,' + mapTy + 'px) scale(' + mapScale + ')';
+    el.style.setProperty('--invs', Math.min(6, 1 / mapScale));
+  }
+}
+function mapReset(){
+  var w = document.getElementById('mapwrap');
+  if(!w) return;
+  mapScale = Math.max(w.clientWidth, w.clientHeight) / 3500;
+  mapTx = (w.clientWidth - 3500 * mapScale) / 2;
+  mapTy = (w.clientHeight - 3500 * mapScale) / 2;
+  mapApply();
+}
+function mapZoom(f){
+  var w = document.getElementById('mapwrap');
+  var cx = w.clientWidth / 2, cy = w.clientHeight / 2;
+  mapTx = cx - (cx - mapTx) * f; mapTy = cy - (cy - mapTy) * f;
+  mapScale *= f; mapApply();
+}
+function worldToMap(x, z){
+  var c = mapCal || {sx:0.45, sy:-0.45, ox:1626, oy:1357};
+  return [x * c.sx + c.ox, z * c.sy + c.oy];
+}
+var mapVeh = [], showP = true, showV = true;
+function mapTogglePlayers(){ showP = !showP; document.getElementById('tgP').classList.toggle('tgon', showP); renderMapDots(); }
+function mapToggleVehicles(){ showV = !showV; document.getElementById('tgV').classList.toggle('tgon', showV); renderMapDots(); }
+function pollMapVehicles(){
+  if(localStorage.getItem('tkweb_tab') !== 'carte' || !showV) return;
+  api('mapvehicles').then(function(list){
+    if(Array.isArray(list)){ mapVeh = list; renderMapDots(); }
+  }).catch(function(){});
+}
+setInterval(pollMapVehicles, 8000);
+function vehMapMenu(id){
+  var v = mapVeh.filter(function(x){ return x.id === id; })[0];
+  if(!v) return;
+  var owner = historyCache.filter(function(a){ return a.characterId === v.ownerId; })[0];
+  var b = '';
+  if(owner){
+    b += '<button onclick="closeModal();playerCard(' + v.ownerId + ',\'' + esc(owner.username||'') + '\')">📇 Fiche du propriétaire (' + esc(owner.username||'?') + ')</button>';
+  }
+  b += '<button onclick="closeModal();api(\'vehiclestow\',{vehicleId:' + v.id + '}).then(function(r){ toast(r.error||\'Rangé au garage\', !!r.error); pollMapVehicles(); })">📥 Ranger au garage</button>';
+  b += '<button class="danger" onclick="closeModal();if(confirm(\'Supprimer définitivement ce véhicule ?\'))api(\'vehicledelete\',{vehicleId:' + v.id + '}).then(function(r){ toast(r.error||\'Supprimé\', !!r.error); pollMapVehicles(); })">🗑 Supprimer</button>';
+  openModal('<h3>' + esc(v.name) + ' <span class="muted mono" style="font-size:12px;font-weight:400">' + esc(v.plate||'') + (v.ghost ? ' · fantôme' : '') + '</span></h3>' + b);
+}
+function renderMapDots(){
+  var box = document.getElementById('mapdots');
+  if(!box || localStorage.getItem('tkweb_tab') !== 'carte') return;
+  var h = '';
+  if(showV){
+    h += mapVeh.map(function(v){
+      var m = worldToMap(v.x, v.z);
+      return '<div class="mveh' + (v.ghost ? ' gh' : '') + '" title="' + esc(v.name) + '" style="left:' + m[0].toFixed(1) + 'px;top:' + m[1].toFixed(1) + 'px" ' +
+        'onclick="if(calState){calClick(event)}else{vehMapMenu(' + v.id + ')}"></div>';
+    }).join('');
+  }
+  if(showP){
+    h += playersCache.filter(function(p){ return p.inGame; }).map(function(p){
+      var m = worldToMap(p.x, p.z);
+      return '<div class="mdot' + (p.adminLevel > 0 ? ' adm' : '') + '" style="left:' + m[0].toFixed(1) + 'px;top:' + m[1].toFixed(1) + 'px" ' +
+        'onclick="if(calState){calClick(event)}else{playerActions(\'' + p.steamId + '\')}"><span>' + esc(p.pseudo) + '</span></div>';
+    }).join('');
+  }
+  box.innerHTML = h;
+}
+function initMap(){
+  if(mapInit) return;
+  mapInit = true;
+  api('mapcalib').then(function(c){ if(!c.error) mapCal = c; }).catch(function(){});
+  var w = document.getElementById('mapwrap');
+  mapReset();
+  var drag = null;
+  w.addEventListener('pointerdown', function(e){
+    // clic sur une pastille (hors calibrage) : on laisse le clic lui parvenir
+    if(!calState && e.target.closest && e.target.closest('.mdot,.mveh')) return;
+    drag = {x:e.clientX, y:e.clientY, tx:mapTx, ty:mapTy, moved:false};
+    w.classList.add('grabbing'); w.setPointerCapture(e.pointerId);
+  });
+  w.addEventListener('pointermove', function(e){
+    if(!drag) return;
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if(Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+    mapTx = drag.tx + dx; mapTy = drag.ty + dy; mapApply();
+  });
+  w.addEventListener('pointerup', function(e){
+    if(drag && !drag.moved && calState) calClick(e);
+    drag = null; w.classList.remove('grabbing');
+  });
+  w.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var r = w.getBoundingClientRect();
+    var cx = e.clientX - r.left, cy = e.clientY - r.top;
+    var f = e.deltaY < 0 ? 1.18 : 0.85;
+    mapTx = cx - (cx - mapTx) * f; mapTy = cy - (cy - mapTy) * f;
+    mapScale *= f; mapApply();
+  }, {passive:false});
+}
+// Calibrage 2 points : va a un endroit en jeu, clique ta position sur la carte, x2
+function calStart(){
+  if(!playersCache.length){ toast('Connecte-toi en jeu pour calibrer', true); return; }
+  calState = 1; calPts = [];
+  calMsg('Étape 1/2 — va en jeu à un endroit reconnaissable (rond-point, croisement…), puis <b>clique ta position exacte sur la carte</b>. <button onclick="calCancel()">Annuler</button>');
+}
+function calMsg(html){
+  var b = document.getElementById('calbox');
+  b.style.display = 'block'; b.innerHTML = html;
+}
+function calCancel(){ calState = 0; document.getElementById('calbox').style.display = 'none'; }
+function calClick(e){
+  if(!calState) return;
+  var me = playersCache.filter(function(p){ return p.inGame; })[0];
+  var mine = playersCache.filter(function(p){ return p.pseudo === (localStorage.getItem('tkweb_name')||'') && p.inGame; })[0];
+  var pl = mine || me;
+  if(!pl){ toast('Aucun joueur en jeu', true); return; }
+  var w = document.getElementById('mapwrap');
+  var r = w.getBoundingClientRect();
+  var mx = (e.clientX - r.left - mapTx) / mapScale;
+  var my = (e.clientY - r.top - mapTy) / mapScale;
+  calPts.push({wx: pl.x, wz: pl.z, px: mx, py: my});
+  if(calState === 1){
+    calState = 2;
+    calMsg('Étape 2/2 — déplace-toi <b>loin</b> (autre bout de la ville minimum), attends 5 s que ta position se rafraîchisse, puis clique à nouveau ta position sur la carte. <button onclick="calCancel()">Annuler</button>');
+    return;
+  }
+  var a = calPts[0], b = calPts[1];
+  if(Math.abs(b.wx - a.wx) < 30 || Math.abs(b.wz - a.wz) < 30){
+    calMsg('Les deux points sont trop proches (il faut au moins 30 m d\u2019\u00e9cart sur chaque axe). Recommence l\u2019\u00e9tape 2 en allant plus loin. <button onclick="calCancel()">Annuler</button>');
+    calState = 2; calPts.pop();
+    return;
+  }
+  var sx = (b.px - a.px) / (b.wx - a.wx);
+  var sy = (b.py - a.py) / (b.wz - a.wz);
+  var ox = a.px - sx * a.wx, oy = a.py - sy * a.wz;
+  api('mapcalib', {sx: sx, sy: sy, ox: ox, oy: oy}).then(function(r2){
+    if(r2.error){ toast(r2.error, true); return; }
+    mapCal = {sx: sx, sy: sy, ox: ox, oy: oy};
+    calCancel(); renderMapDots();
+    toast('Carte calibrée ! Enregistré pour tout le monde sur ce serveur.');
+  });
 }
 
 // --- Pastilles de notification sur la navigation ---
