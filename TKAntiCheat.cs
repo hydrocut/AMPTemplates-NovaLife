@@ -65,7 +65,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.9 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.9.1 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -83,7 +83,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.9 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.9.1 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -853,7 +853,7 @@ public class TKAntiCheat : Plugin
                 }
                 // 2) payload bourré de NaN / Infinity = tentative de crash
                 //    « écran noir » (casse les matrices de collider). Jetée.
-                if (config.crashGuard && PayloadNaNCount(msg.payload) >= 4)
+                if (config.crashGuard && PayloadHasNaNBurst(msg.payload))
                 {
                     HandleCrash(conn, msg, "valeurs NaN/Infinity (crash écran noir)");
                     return;
@@ -887,31 +887,34 @@ public class TKAntiCheat : Plugin
         }
     }
 
-    // Compte les fenêtres de 4 octets interprétables comme un flottant NaN ou
-    // Infinity dans le payload. Un vrai vecteur/quaternion NaN en produit
-    // plusieurs ; on exige un seuil (>=4) pour zéro faux positif sur du
-    // trafic légitime (aucune valeur de jeu normale n'est NaN/Infinity).
-    private static int PayloadNaNCount(ArraySegment<byte> seg)
+    // Détecte une VRAIE injection de crash : au moins 3 flottants NaN/Infinity
+    // CONSÉCUTIFS au même pas de 4 octets — c'est la signature d'un Vector3 ou
+    // d'un Quaternion entièrement NaN (ce qui casse la matrice de transform).
+    // On exige la consécutivité car un scan « au hasard » d'octets de conduite
+    // légitime produit des motifs NaN isolés : ne compter que les triplets
+    // contigus élimine ces faux positifs (proba d'un triplet légitime ~1e-7).
+    private static bool PayloadHasNaNBurst(ArraySegment<byte> seg)
     {
         byte[] a = seg.Array;
-        if (a == null || seg.Count < 4 || seg.Count > 8192)
+        if (a == null || seg.Count < 12 || seg.Count > 8192)
         {
-            return 0;
+            return false;
         }
-        int off = seg.Offset, end = seg.Offset + seg.Count - 4, bad = 0;
-        for (int i = off; i <= end; i++)
+        int off = seg.Offset, end = seg.Offset + seg.Count;
+        for (int i = off; i + 12 <= end; i++)
         {
-            float f = BitConverter.ToSingle(a, i);
-            if (float.IsNaN(f) || float.IsInfinity(f))
+            if (IsBadFloat(a, i) && IsBadFloat(a, i + 4) && IsBadFloat(a, i + 8))
             {
-                bad++;
-                if (bad >= 4)
-                {
-                    return bad;
-                }
+                return true; // 3 flottants NaN/Inf d'affilée = transform NaN
             }
         }
-        return bad;
+        return false;
+    }
+
+    private static bool IsBadFloat(byte[] a, int i)
+    {
+        float f = BitConverter.ToSingle(a, i);
+        return float.IsNaN(f) || float.IsInfinity(f);
     }
 
     private Player FindAuthor(NetworkConnectionToClient conn)
