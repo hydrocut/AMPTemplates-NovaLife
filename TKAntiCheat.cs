@@ -45,6 +45,7 @@ public class TKAntiCheat : Plugin
         public float lastTime;
         public bool hasPos;
         public int overSpeedStreak;
+        public int vehSpeedStreak;
         public float ignoreUntil; // téléport légitime : on ignore la vitesse un instant
     }
 
@@ -65,7 +66,7 @@ public class TKAntiCheat : Plugin
         LoadConfig();
         if (!config.enabled)
         {
-            Debug.Log("[TKAC] Plugin TKAntiCheat v1.10 désactivé par config");
+            Debug.Log("[TKAC] Plugin TKAntiCheat v1.10.1 désactivé par config");
             return;
         }
         BuildAdminWhitelist();
@@ -83,7 +84,7 @@ public class TKAntiCheat : Plugin
         {
             Debug.LogError("[TKAC] Impossible de démarrer le ticker : " + ex.Message);
         }
-        Debug.Log("[TKAC] Plugin TKAntiCheat v1.10 initialisé (ALERTE seule — argent > "
+        Debug.Log("[TKAC] Plugin TKAntiCheat v1.10.1 initialisé (ALERTE seule — argent > "
             + config.moneyAlertThreshold.ToString("0") + " / vitesse > " + config.maxSpeed + " m/s)");
     }
 
@@ -713,14 +714,38 @@ public class TKAntiCheat : Plugin
                 continue;
             }
 
-            // En véhicule = vitesse légitime, on ignore
             bool inVehicle = false;
             try { inVehicle = p.GetVehicle() != null; } catch { }
-            if (inVehicle || now < t.ignoreUntil)
+            if (now < t.ignoreUntil)
             {
                 t.overSpeedStreak = 0;
+                t.vehSpeedStreak = 0;
                 continue;
             }
+            if (inVehicle)
+            {
+                // Speed boost véhicule (menus MelonLoader : moteur trafiqué) :
+                // seuil dédié, persistance 3 relevés pour absorber lag/chutes.
+                t.overSpeedStreak = 0;
+                float vSpeed = dist / dt;
+                if (vSpeed > config.maxVehicleSpeed)
+                {
+                    t.vehSpeedStreak++;
+                    if (t.vehSpeedStreak >= 3)
+                    {
+                        Alert("VITESSE-VHC", SafePseudo(p), p.steamId,
+                            (vSpeed * 3.6f).ToString("0") + " km/h soutenus en véhicule (seuil "
+                            + (config.maxVehicleSpeed * 3.6f).ToString("0") + " km/h — speed boost probable)");
+                        t.vehSpeedStreak = 0;
+                    }
+                }
+                else
+                {
+                    t.vehSpeedStreak = 0;
+                }
+                continue;
+            }
+            t.vehSpeedStreak = 0;
 
             float speed = dist / dt;
             if (speed > config.maxSpeed)
@@ -1329,6 +1354,9 @@ public class TKAntiCheatConfig
     public double moneyAlertThreshold = 500000;
     // Vitesse au sol max tolérée hors véhicule (m/s). Sprint ~6, cheval ~12.
     public float maxSpeed = 30f;
+    // Vitesse max tolérée EN véhicule (m/s). 70 m/s = 252 km/h, au-dessus
+    // de tout véhicule légitime du jeu ; détecte les speed boosts injectés.
+    public float maxVehicleSpeed = 70f;
     // Bond de distance en un relevé = téléport manifeste (m)
     public float teleportDistance = 120f;
     // Grâce après connexion/mort/spawn (s) : on ne juge pas la vitesse
@@ -1408,6 +1436,7 @@ public class TKAntiCheatConfig
         sb.AppendLine("  \"enabled\": " + (c.enabled ? "true" : "false") + ",");
         sb.AppendLine("  \"moneyAlertThreshold\": " + c.moneyAlertThreshold.ToString("0") + ",");
         sb.AppendLine("  \"maxSpeed\": " + c.maxSpeed.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
+        sb.AppendLine("  \"maxVehicleSpeed\": " + c.maxVehicleSpeed.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"teleportDistance\": " + c.teleportDistance.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"teleportGraceSeconds\": " + c.teleportGraceSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ",");
         sb.AppendLine("  \"itemAlertQuantity\": " + c.itemAlertQuantity + ",");
@@ -1460,6 +1489,7 @@ public class TKAntiCheatConfig
         c.enabled = GetBool(json, "enabled", c.enabled);
         c.moneyAlertThreshold = GetDouble(json, "moneyAlertThreshold", c.moneyAlertThreshold);
         c.maxSpeed = (float)GetDouble(json, "maxSpeed", c.maxSpeed);
+        c.maxVehicleSpeed = (float)GetDouble(json, "maxVehicleSpeed", c.maxVehicleSpeed);
         c.teleportDistance = (float)GetDouble(json, "teleportDistance", c.teleportDistance);
         c.teleportGraceSeconds = (float)GetDouble(json, "teleportGraceSeconds", c.teleportGraceSeconds);
         c.itemAlertQuantity = (int)GetDouble(json, "itemAlertQuantity", c.itemAlertQuantity);
