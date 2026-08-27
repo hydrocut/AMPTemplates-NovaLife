@@ -521,7 +521,7 @@ button.chip img{width:26px;height:26px;object-fit:contain}
   </section>
 
   <section data-tab="securite" class="need-owner">
-    <h2>Journal du serveur <span class="muted" style="font-weight:400;font-size:12px">— alertes &amp; actions archivées 30 jours, console en direct depuis le démarrage</span></h2>
+    <h2>Journal du serveur <span class="muted" style="font-weight:400;font-size:12px">— alertes &amp; actions archivées 30 jours, console en direct depuis le démarrage · plus récent en haut</span></h2>
     <div class="row" style="margin-bottom:8px;flex-wrap:wrap">
       <select id="slog-day" onchange="loadServerLog()"><option value="">En direct (console)</option></select>
       <input id="slog-q" placeholder="Filtrer (TKFLOOD, mod-menu, pseudo…)" style="width:240px" onkeydown="if(event.key==='Enter')loadServerLog()">
@@ -1050,14 +1050,13 @@ function loadServerLog(){
     }
     document.getElementById('slog-count').textContent = r.lines.length + ' ligne(s) affichée(s) / ' + r.total;
     if(!r.lines.length){ b.innerHTML = '<span class="muted">Rien à afficher' + (alerts ? ' — décoche « Alertes seulement » pour tout voir' : '') + '</span>'; return; }
-    var atBottom = b.scrollTop + b.clientHeight >= b.scrollHeight - 40;
-    b.innerHTML = r.lines.map(function(l){
+    b.innerHTML = r.lines.slice().reverse().map(function(l){
       var red = l.ty === 'Error' || l.ty === 'Exception' || /ALERTE|PACKET-BAN|BAN ip=|CHEAT/.test(l.m);
       var orange = /\[TKFLOOD\]|\[TKCHEAT\]/.test(l.m) && !red;
       var st = red ? 'color:#ff7b72' : (orange ? 'color:#e3b341' : '');
-      return '<div style="' + st + '"><span style="opacity:.5">' + esc(l.t) + '</span> ' + linkSteam(esc(l.m)) + '</div>';
+      return '<div style="' + st + '"><span style="opacity:.5">' + esc(l.t) + '</span> ' + linkSteam(esc(l.m)) + (l.n > 1 ? ' <span style="opacity:.55">(×' + l.n + ')</span>' : '') + '</div>';
     }).join('');
-    if(day){ b.scrollTop = 0; } else if(atBottom){ b.scrollTop = b.scrollHeight; }
+    b.scrollTop = 0;
   });
 }
 function slogAuto(){

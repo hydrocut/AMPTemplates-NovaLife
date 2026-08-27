@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.7.1 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.7.2 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -4522,8 +4522,38 @@ public class TKWebPanel : Plugin
     private static long logFileBytesToday;
     private static string logFileDay = "";
 
+    // Bruit bénin connu du serveur headless (pas de GPU/audio) : ces erreurs
+    // Unity reviennent par centaines et n'ont aucune valeur pour un admin.
+    private static readonly string[] logNoise = new string[]
+    {
+        "Can't remove AudioSource",
+        "AudioLowPassFilter depends on it",
+        "Texture has not yet finished downloading",
+        "Name collision with command",
+        "Look rotation viewing vector is zero",
+        "Coroutine couldn't be started",
+        "d3d11: failed to create",
+        "Camera does not exist"
+    };
+
+    private static bool LogIsNoise(string msg)
+    {
+        for (int i = 0; i < logNoise.Length; i++)
+        {
+            if (msg.IndexOf(logNoise[i], StringComparison.Ordinal) >= 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static bool LogIsImportant(string msg, LogType type)
     {
+        if (LogIsNoise(msg))
+        {
+            return false;
+        }
         if (type == LogType.Error || type == LogType.Exception)
         {
             return true;
@@ -4578,7 +4608,12 @@ public class TKWebPanel : Plugin
                 {
                     return;
                 }
-                string msg = condition.Replace("\r", " ").Replace("\n", " ");
+                string msg = Regex.Replace(condition, "\u001b\\[[0-9;]*m|\\[[0-9]{1,2}(?:;[0-9]{1,2})*m", "")
+                    .Replace("\r", " ").Replace("\n", " ").Trim();
+                if (msg.Length == 0)
+                {
+                    return;
+                }
                 if (msg.Length > 500)
                 {
                     msg = msg.Substring(0, 500);
@@ -4586,7 +4621,18 @@ public class TKWebPanel : Plugin
                 string hhmm = DateTime.Now.ToString("HH:mm:ss");
                 lock (logBufLock)
                 {
-                    logBuf.Add(new string[] { hhmm, type.ToString(), msg });
+                    // même message que la ligne précédente -> on incrémente son
+                    // compteur au lieu d'empiler 200 lignes identiques
+                    string[] prev = logBuf.Count > 0 ? logBuf[logBuf.Count - 1] : null;
+                    if (prev != null && prev[2] == msg)
+                    {
+                        int n;
+                        int.TryParse(prev[3], out n);
+                        prev[3] = (n + 1).ToString();
+                        prev[0] = hhmm;
+                        return;
+                    }
+                    logBuf.Add(new string[] { hhmm, type.ToString(), msg, "1" });
                     if (logBuf.Count > 4000)
                     {
                         logBuf.RemoveRange(0, 1000);
@@ -4679,7 +4725,8 @@ public class TKWebPanel : Plugin
             {
                 continue;
             }
-            outp.Add("{\"t\":" + Json.Str(e[0]) + ",\"ty\":" + Json.Str(e[1]) + ",\"m\":" + Json.Str(e[2]) + "}");
+            string n = e.Length > 3 ? e[3] : "1";
+            outp.Add("{\"t\":" + Json.Str(e[0]) + ",\"ty\":" + Json.Str(e[1]) + ",\"m\":" + Json.Str(e[2]) + ",\"n\":" + n + "}");
         }
         outp.Reverse();
         List<string> dj = new List<string>();
