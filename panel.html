@@ -531,8 +531,8 @@ button.chip img{width:26px;height:26px;object-fit:contain}
     <h2 style="margin-top:18px">Anti-flood — IP bannies (TKAntiFlood)</h2>
     <div class="tblwrap">
     <table>
-      <thead><tr><th>IP</th><th>Banni le</th><th>Motif</th><th>Expiration</th><th></th></tr></thead>
-      <tbody id="floodbans"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody>
+      <thead><tr><th>IP</th><th>Compte(s) lié(s)</th><th>Banni le</th><th>Motif</th><th>Expiration</th><th></th></tr></thead>
+      <tbody id="floodbans"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody>
     </table>
     </div>
   </section>
@@ -932,12 +932,16 @@ function refresh(){
 
   api('floodbans').then(function(list){
     var tb = document.getElementById('floodbans');
-    if(list.length === 0){ tb.innerHTML = '<tr><td colspan="5" class="muted">Aucune IP bannie</td></tr>'; return; }
+    if(list.length === 0){ tb.innerHTML = '<tr><td colspan="6" class="muted">Aucune IP bannie</td></tr>'; return; }
     list.sort(function(a, b2){ return (b2.bannedAt || 0) - (a.bannedAt || 0); });
     tb.innerHTML = list.map(function(b){
       var exp = b.expiry == 0 ? '<b>Permanent</b>' : new Date(b.expiry * 1000).toLocaleString('fr-FR');
       var at = b.bannedAt > 0 ? new Date(b.bannedAt * 1000).toLocaleString('fr-FR') : '<span class="muted">—</span>';
+      var who = (b.who && b.who.length)
+        ? b.who.slice(0, 3).map(function(w){ return slinkSteam(w.sid, w.name || w.sid); }).join(', ') + (b.who.length > 3 ? ' <span class="muted">+' + (b.who.length - 3) + '</span>' : '')
+        : '<span class="muted" title="Aucun compte vu depuis cette IP dans le journal (attaquant jamais entré en jeu, ou IP antérieure au journal)">—</span>';
       return '<tr><td class="mono clickable" onclick="openIdentityIp(\'' + esc(b.ip) + '\')" title="Voir les comptes liés à cette IP">' + esc(b.ip) + '</td>' +
+        '<td>' + who + '</td>' +
         '<td>' + at + '</td>' +
         '<td style="font-size:12px">' + (b.reason ? esc(b.reason) : '<span class="muted">—</span>') + '</td>' +
         '<td>' + exp + '</td>' +

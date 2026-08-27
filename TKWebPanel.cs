@@ -330,7 +330,7 @@ public class TKWebPanel : Plugin
         StartSericache();
         StartIdentityLogger();
         StartLogBuffer();
-            Debug.Log("[TKWEB] Plugin TKWebPanel v3.15 initialisé — panel sur le port " + port);
+            Debug.Log("[TKWEB] Plugin TKWebPanel v3.15.2 initialisé — panel sur le port " + port);
             AnnounceUrl(port);
         }
         catch (Exception ex)
@@ -6173,10 +6173,26 @@ public class TKWebPanel : Plugin
                         sb.Append(",");
                     }
                     first = false;
-                    sb.Append("{\"ip\":").Append(Json.Str(parts[0].Trim()));
+                    string bip = parts[0].Trim();
+                    sb.Append("{\"ip\":").Append(Json.Str(bip));
                     sb.Append(",\"expiry\":").Append(parts.Length > 1 && parts[1].Trim().Length > 0 ? parts[1].Trim() : "0");
                     sb.Append(",\"bannedAt\":").Append(parts.Length > 2 && parts[2].Trim().Length > 0 ? parts[2].Trim() : "0");
-                    sb.Append(",\"reason\":").Append(Json.Str(parts.Length > 3 ? parts[3].Trim() : "")).Append("}");
+                    sb.Append(",\"reason\":").Append(Json.Str(parts.Length > 3 ? parts[3].Trim() : ""));
+                    // comptes vus depuis cette IP (journal d'identités)
+                    sb.Append(",\"who\":[");
+                    bool fw = true;
+                    lock (identLock)
+                    {
+                        foreach (KeyValuePair<string, Ident> kv in identities)
+                        {
+                            if (!kv.Value.ips.ContainsKey(bip)) continue;
+                            if (!fw) sb.Append(",");
+                            fw = false;
+                            sb.Append("{\"sid\":\"").Append(kv.Key).Append("\",\"name\":")
+                              .Append(Json.Str(kv.Value.name ?? "?")).Append("}");
+                        }
+                    }
+                    sb.Append("]}");
                 }
             }
         }
